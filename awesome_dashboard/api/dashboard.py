@@ -1,6 +1,6 @@
 import frappe
 
-from awesome_dashboard.api.stock import _sanitize_time_grouping
+from awesome_dashboard.api._utils import sanitize_time_grouping
 
 
 def _get_account_bounds(company, account_name):
@@ -52,7 +52,7 @@ def grouped_sales_summary(from_date, to_date, company, time_grouping):
 	        company: Company name
 	        time_grouping: MySQL DATE_FORMAT string (e.g. '%%Y-%%m' for monthly)
 	"""
-	time_grouping = _sanitize_time_grouping(time_grouping)
+	time_grouping = sanitize_time_grouping(time_grouping)
 
 	query = f"""
 		SELECT
@@ -81,7 +81,7 @@ def grouped_expenses_summary(from_date, to_date, company, time_grouping):
 	        company: Company name
 	        time_grouping: MySQL DATE_FORMAT string (e.g. '%%Y-%%m' for monthly)
 	"""
-	time_grouping = _sanitize_time_grouping(time_grouping)
+	time_grouping = sanitize_time_grouping(time_grouping)
 
 	if not from_date or not to_date or not company:
 		frappe.throw("from_date, to_date and company are required")

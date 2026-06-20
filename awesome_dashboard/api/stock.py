@@ -1,5 +1,7 @@
 import frappe
 
+from awesome_dashboard.api._utils import sanitize_time_grouping
+
 
 @frappe.whitelist(allow_guest=False)
 def get_stock_levels(warehouse, company, pack_size_map=None):
@@ -113,7 +115,7 @@ def get_average_stock_value(from_date, to_date, company, time_grouping):
 	        company: Company name
 	        time_grouping: MySQL DATE_FORMAT string (e.g. '%%Y-%%m' for monthly)
 	"""
-	time_grouping = _sanitize_time_grouping(time_grouping)
+	time_grouping = sanitize_time_grouping(time_grouping)
 
 	query = f"""
 		SELECT
@@ -196,15 +198,3 @@ def get_daily_stock_value(from_date, to_date, company):
 	"""
 
 	return frappe.db.sql(query, (to_date, company, to_date, from_date), as_dict=True)
-
-
-_TIME_GROUPINGS = frozenset({
-	"%%Y-%%m-%%d", "%%Y-%%m", "%%Y-%%U", "%%Y",
-	"%%Y-%%m-%%d %%H:%%i:%%s", "%%H:%%i:%%s",
-})
-
-
-def _sanitize_time_grouping(grouping):
-	if grouping not in _TIME_GROUPINGS:
-		frappe.throw(f"Invalid time_grouping: '{grouping}'. Allowed: {sorted(_TIME_GROUPINGS)}")
-	return grouping
