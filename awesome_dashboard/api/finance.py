@@ -119,6 +119,7 @@ def amend_expense_journal_entry(journal_entry, amount, description, expense_acco
 			"posting_date": posting_date,
 			"user_remark": description or "",
 			"amended_from": journal_entry,
+			"amendment_date": posting_date,
 			"accounts": [
 				{"account": expense_account, "debit_in_account_currency": amount},
 				{"account": income_account, "credit_in_account_currency": amount},
