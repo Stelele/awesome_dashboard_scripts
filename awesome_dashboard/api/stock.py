@@ -91,16 +91,21 @@ def get_stock_levels(warehouse, company, pack_size_map=None):
 	data = frappe.db.sql(query, (wh_name, company, wh_name, company, wh_name), as_dict=True)
 
 	if pack_size_map and isinstance(pack_size_map, dict):
+		normalized = {}
+		for k, v in pack_size_map.items():
+			if isinstance(v, dict):
+				normalized[k] = {"size": int(v.get("size", 1)), "unit": v.get("unit", "crate")}
+			else:
+				normalized[k] = {"size": int(v), "unit": "crate"}
+
 		for entry in data:
-			for key, divisor in pack_size_map.items():
-				if key in entry.item_name:
-					try:
-						div = int(divisor)
-						if div > 0:
-							entry["pack_size"] = f"{round(entry.real_qty / div, 2)} crates"
-					except (ValueError, ZeroDivisionError):
-						pass
-					break
+			match = next(
+				(cfg for key, cfg in normalized.items() if key in entry.item_name), None
+			)
+			if match and match["size"] > 0:
+				unit = match["unit"]
+				plural = unit if unit.endswith("s") else unit + "s"
+				entry["pack_size"] = f"{round(entry.real_qty / match['size'], 2)} {plural}"
 
 	return data
 
