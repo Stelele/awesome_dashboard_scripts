@@ -1,0 +1,12 @@
+[
+  {
+    "doctype": "Role",
+    "name": "Awesome Dashboard User",
+    "role_name": "Awesome Dashboard User",
+    "desk_access": 0,
+    "disabled": 0,
+    "restrict_to_domain": null,
+    "two_factor_auth": 0,
+    "is_custom": 1
+  }
+]

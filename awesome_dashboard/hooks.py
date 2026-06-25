@@ -5,6 +5,14 @@ app_description = "What if there\'s one dashboard to rule them all. withing reas
 app_email = "giftmugweni@gmail.com"
 app_license = "mit"
 
+# Fixtures
+# ------------------
+
+fixtures = [
+    {"dt": "Role", "filters": [["name", "=", "Awesome Dashboard User"]]},
+    {"dt": "Custom DocPerm", "filters": [["role", "=", "Awesome Dashboard User"]]},
+]
+
 # Apps
 # ------------------
 
