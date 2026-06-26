@@ -61,7 +61,7 @@ def grouped_sales_summary(from_date, to_date, company, time_grouping):
 			COUNT(name) AS count
 		FROM `tabPOS Invoice`
 		WHERE
-			status in ('Paid', 'Consolidated')
+			docstatus = 1
 			AND company = %s
 			AND posting_date BETWEEN %s AND %s
 		GROUP BY DATE_FORMAT(posting_date, '{time_grouping}')
@@ -131,13 +131,13 @@ def dashboard_complete(from_date, to_date, prev_from_date, prev_to_date, company
 	current_sales = frappe.db.sql("""
 		SELECT COALESCE(SUM(total), 0) as total, COALESCE(COUNT(*), 0) as count
 		FROM `tabPOS Invoice`
-		WHERE status IN ('Paid', 'Consolidated') AND posting_date BETWEEN %s AND %s AND company = %s
+		WHERE docstatus = 1 AND posting_date BETWEEN %s AND %s AND company = %s
 	""", (from_date, to_date, company), as_dict=True)[0]
 
 	prev_sales = frappe.db.sql("""
 		SELECT COALESCE(SUM(total), 0) as total, COALESCE(COUNT(*), 0) as count
 		FROM `tabPOS Invoice`
-		WHERE status IN ('Paid', 'Consolidated') AND posting_date BETWEEN %s AND %s AND company = %s
+		WHERE docstatus = 1 AND posting_date BETWEEN %s AND %s AND company = %s
 	""", (prev_from_date, prev_to_date, company), as_dict=True)[0]
 
 	results.append({
@@ -227,7 +227,7 @@ def dashboard_complete(from_date, to_date, prev_from_date, prev_to_date, company
 	month_sales = frappe.db.sql("""
 		SELECT DATE_FORMAT(posting_date, '%%Y-%%m') as grouping_name, SUM(total) as total, COUNT(*) as count
 		FROM `tabPOS Invoice`
-		WHERE status IN ('Paid', 'Consolidated') AND posting_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH) AND company = %s
+		WHERE docstatus = 1 AND posting_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH) AND company = %s
 		GROUP BY DATE_FORMAT(posting_date, '%%Y-%%m')
 		ORDER BY grouping_name
 	""", (company,), as_dict=True)
@@ -245,7 +245,7 @@ def dashboard_complete(from_date, to_date, prev_from_date, prev_to_date, company
 		FROM `tabPOS Invoice` pi
 		INNER JOIN `tabPOS Invoice Item` pii ON pii.parent = pi.name
 		INNER JOIN `tabItem` i ON i.name = pii.item_code
-		WHERE pi.status IN ('Paid', 'Consolidated') AND pi.posting_date BETWEEN %s AND %s AND pi.company = %s
+		WHERE pi.docstatus = 1 AND pi.posting_date BETWEEN %s AND %s AND pi.company = %s
 		GROUP BY i.item_group
 		ORDER BY total DESC
 	""", (from_date, to_date, company), as_dict=True)
@@ -416,7 +416,7 @@ def dashboard_bar_chart(from_date, to_date, grouping, company):
 			SUM(total) as total,
 			COUNT(*) as count
 		FROM `tabPOS Invoice`
-		WHERE status IN ('Paid', 'Consolidated')
+		WHERE docstatus = 1
 			AND posting_date BETWEEN %s AND %s
 			AND company = %s
 		GROUP BY {sql_expr}
@@ -453,7 +453,7 @@ def dashboard_sales_aggregated(from_date, to_date, company):
 			ROUND(SUM(child.amount), 2) as item_total_amount
 		FROM `tabPOS Invoice` parent
 		INNER JOIN `tabPOS Invoice Item` child ON child.parent = parent.name
-		WHERE parent.status IN ('Paid', 'Consolidated')
+		WHERE 		parent.docstatus = 1
 		AND parent.company = %s
 		AND parent.posting_date BETWEEN %s AND %s
 		GROUP BY parent.posting_date, child.item_name, child.item_group
