@@ -313,5 +313,26 @@
     "print": 0,
     "email": 0,
     "if_owner": 0
+  },
+  {
+    "doctype": "Custom DocPerm",
+    "name": "ad-stock-reconciliation-rwc",
+    "parent": "Stock Reconciliation",
+    "role": "Awesome Dashboard User",
+    "permlevel": 0,
+    "read": 1,
+    "write": 1,
+    "create": 1,
+    "delete": 0,
+    "submit": 0,
+    "cancel": 0,
+    "amend": 0,
+    "report": 0,
+    "export": 0,
+    "import": 0,
+    "share": 0,
+    "print": 0,
+    "email": 0,
+    "if_owner": 0
   }
 ]
