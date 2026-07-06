@@ -324,7 +324,7 @@
     "write": 1,
     "create": 1,
     "delete": 0,
-    "submit": 0,
+    "submit": 1,
     "cancel": 0,
     "amend": 0,
     "report": 0,

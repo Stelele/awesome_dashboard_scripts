@@ -13,8 +13,6 @@ fixtures = [
     {"dt": "Custom DocPerm", "filters": [["role", "=", "Awesome Dashboard User"]]},
 ]
 
-
-
 # Apps
 # ------------------
 
