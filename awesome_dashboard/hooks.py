@@ -1,7 +1,7 @@
 app_name = "awesome_dashboard"
 app_title = "Awesome Dashboard"
 app_publisher = "Gift Mugweni"
-app_description = "What if there\'s one dashboard to rule them all. withing reason of cause. "
+app_description = "What if there's one dashboard to rule them all. withing reason of cause. "
 app_email = "giftmugweni@gmail.com"
 app_license = "mit"
 
@@ -9,8 +9,7 @@ app_license = "mit"
 # ------------------
 
 fixtures = [
-    {"dt": "Role", "filters": [["name", "=", "Awesome Dashboard User"]]},
-    {"dt": "Custom DocPerm", "filters": [["role", "=", "Awesome Dashboard User"]]},
+	{"dt": "Role", "filters": [["name", "=", "Awesome Dashboard User"]]},
 ]
 
 # Apps
@@ -94,7 +93,10 @@ required_apps = ["erpnext"]
 # ------------
 
 # before_install = "awesome_dashboard.install.before_install"
-# after_install = "awesome_dashboard.install.after_install"
+after_install = "awesome_dashboard.installer.after_install"
+
+# grant/keep the dashboard role permissions (idempotent, preserves standard perms)
+after_migrate = ["awesome_dashboard.installer.after_migrate"]
 
 # Uninstallation
 # ------------
@@ -263,4 +265,3 @@ required_apps = ["erpnext"]
 # ------------
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
-
