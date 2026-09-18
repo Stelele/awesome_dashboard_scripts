@@ -113,7 +113,7 @@ Grants the following access to the "Awesome Dashboard User" role on core ERPNext
 
 ## Whitelisted API Endpoints
 
-All endpoints are verified and match the actual Python module paths. Format: `GET/POST /api/method/awesome_dashboard.api.<module>.<method>`
+All endpoints are verified and match the actual Python module paths. Format: `GET /api/method/awesome_dashboard.api.<module>.<method>` for read-only methods, or `POST /api/method/awesome_dashboard.api.<module>.<method>` for state-changing methods (create/amend/cancel).
 
 ### `awesome_dashboard.api.dashboard`
 
@@ -373,10 +373,15 @@ And `<method>` is the function name as defined in the respective `.py` file.
 
 **Examples (all verified against actual code)**:
 
+Read-only (GET):
+
 - `GET /api/method/awesome_dashboard.api.dashboard.dashboard_complete`
-- `GET /api/method/awesome_dashboard.api.purchase.create_full_purchase`
-- `GET /api/method/awesome_dashboard.api.item.create_item`
 - `GET /api/method/awesome_dashboard.api.stock.get_stock_levels`
+
+State-changing (POST):
+
+- `POST /api/method/awesome_dashboard.api.purchase.create_full_purchase`
+- `POST /api/method/awesome_dashboard.api.item.create_item`
 
 All endpoints return `allow_guest=False`, meaning they require a valid Frappe/ERPNext session cookie (`frappe.session` or authenticated browser login).
 
