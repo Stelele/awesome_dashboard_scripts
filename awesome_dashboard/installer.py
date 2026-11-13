@@ -112,4 +112,5 @@ def ensure_dashboard_permissions():
 			if not frappe.db.get_value("Custom DocPerm", existing, ptype):
 				update_permission_property(doctype, DASHBOARD_ROLE, 0, ptype, 1)
 
-	frappe.db.commit()
+	# Outside any request transaction (migrate hooks) — commit makes the grant durable immediately.
+	frappe.db.commit()  # nosemgrep
