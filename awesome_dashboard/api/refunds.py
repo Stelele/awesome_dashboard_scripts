@@ -159,9 +159,68 @@ def get_invoice_detail_for_refund(invoice_name: str, company: str | None = None)
 	}
 
 
+def _set_return_payments(target_doc, source_doc):
+	"""Rebuild a return doc's payments from the returned rows' own totals, capped at tendered.
+
+	ERPNext model (erpnext/controllers/sales_and_purchase_return.py:make_return_doc ~625,
+	erpnext/accounts/doctype/pos_invoice/pos_invoice.py:validate_payment_amount ~561,
+	validate_change_amount ~549, set_outstanding_amount ~584): a return's payment rows
+	must each be <= 0 and their total must not exceed the return's grand_total in
+	magnitude — equality is not required, and refunding more than tendered is impossible.
+	``make_return_doc`` copies ``-source.paid_amount`` verbatim, which breaks invoices
+	where paid != grand_total (change given, partial credit), so both refund paths
+	re-derive payments here: the returned rows' recalculated value, capped at what the
+	customer actually tendered, allocated across the source payment rows with the last
+	row absorbing the remainder so the sum is exactly ``-refund_total``.
+	"""
+	refund_total = min(abs(flt(target_doc.grand_total)), abs(flt(source_doc.paid_amount)))
+	tendered = sum(abs(flt(p.amount)) for p in source_doc.payments)
+
+	target_doc.set("payments", [])
+	if not tendered or not refund_total:
+		target_doc.paid_amount = 0
+		target_doc.base_paid_amount = 0
+		return
+
+	remaining = refund_total
+	source_payments = list(source_doc.payments)
+	for i, payment in enumerate(source_payments):
+		if i == len(source_payments) - 1:
+			amount = remaining
+		else:
+			amount = min(abs(flt(payment.amount)) / tendered * refund_total, remaining)
+			remaining -= amount
+		if not amount:
+			continue
+		target_doc.append(
+			"payments",
+			{
+				"mode_of_payment": payment.mode_of_payment,
+				"type": payment.type,
+				"amount": -amount,
+				"base_amount": flt(
+					-amount * flt(source_doc.conversion_rate),
+					source_doc.precision("base_paid_amount"),
+				),
+				"account": payment.account,
+				"default": payment.default,
+			},
+		)
+
+	target_doc.paid_amount = -refund_total
+	target_doc.base_paid_amount = flt(
+		-refund_total * flt(source_doc.conversion_rate),
+		source_doc.precision("base_paid_amount"),
+	)
+
+
 @frappe.whitelist(allow_guest=False)
 def process_pos_refund(invoice_name: str, return_items: str, company: str | None = None):
 	"""Create and submit a return POS Invoice for the given items.
+
+	Payments on the return are derived from the returned rows' own recalculated
+	totals, capped at what the customer tendered — never scaled off the source
+	invoice's paid amount (which may include change given or partial credit).
 
 	args:
 	        invoice_name: Name of the submitted POS Invoice to return against
@@ -242,6 +301,8 @@ def process_pos_refund(invoice_name: str, return_items: str, company: str | None
 
 	frappe.has_permission("POS Invoice", "create", doc=target_doc, throw=True)
 
+	_set_return_payments(target_doc, source_doc)
+
 	if is_partial:
 		# Remove items not in return_items and adjust quantities
 		items_to_keep = []
@@ -259,29 +320,7 @@ def process_pos_refund(invoice_name: str, return_items: str, company: str | None
 		target_doc.items = items_to_keep
 		target_doc.calculate_taxes_and_totals()
 
-		# Adjust payments proportionally for partial return
-		original_total = abs(source_doc.grand_total) or 0
-		if original_total == 0:
-			frappe.throw(_("Cannot partially refund an invoice with a zero grand total."))
-		returned_total = abs(target_doc.grand_total)
-		proportion = returned_total / original_total
-
-		target_doc.set("payments", [])
-		for payment in source_doc.payments:
-			adjusted_amount = -1 * flt(payment.amount) * proportion
-			if adjusted_amount != 0:
-				target_doc.append(
-					"payments",
-					{
-						"mode_of_payment": payment.mode_of_payment,
-						"amount": adjusted_amount,
-						"account": payment.account,
-						"type": payment.type,
-						"default": payment.default,
-					},
-				)
-
-		target_doc.paid_amount = sum(flt(p.amount) for p in target_doc.payments)
+		_set_return_payments(target_doc, source_doc)
 
 	target_doc.save()
 	target_doc.submit()
