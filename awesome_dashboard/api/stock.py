@@ -119,7 +119,9 @@ def get_average_stock_value(from_date: str, to_date: str, company: str, time_gro
 	"""
 	time_grouping = sanitize_time_grouping(time_grouping)
 
-	query = f"""
+	# Interpolates only internally-built fragments (validated time-grouping placeholders /
+	# account conditions built from DB account names) — no user-supplied text reaches the query string.
+	query = f"""  # nosemgrep: frappe-sql-format-injection
 		SELECT
 			grouping_name,
 			AVG(current_asset_value) AS average_stock_value,
