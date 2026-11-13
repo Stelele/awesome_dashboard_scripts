@@ -38,6 +38,7 @@ DASHBOARD_PERMISSIONS = {
 		"cancel": 1,
 		"amend": 1,
 	},
+	"POS Invoice": {"read": 1, "write": 1, "create": 1, "submit": 1},
 	"Purchase Invoice": {
 		"read": 1,
 		"write": 1,
