@@ -1,10 +1,10 @@
 import json
 
 import frappe
+from erpnext.accounts.doctype.pos_invoice.pos_invoice import make_sales_return
 from erpnext.controllers.sales_and_purchase_return import (
 	get_invoice_item_returned_qty,
 	is_invoice_returnable,
-	make_return_doc,
 )
 from frappe import _
 from frappe.utils import cint, flt
@@ -231,9 +231,17 @@ def _set_return_payments(target_doc, source_doc):
 def process_pos_refund(invoice_name: str, return_items: str, company: str | None = None):
 	"""Create and submit a return POS Invoice for the given items.
 
-	Payments on the return are derived from the returned rows' own recalculated
-	totals, capped at what the customer tendered — never scaled off the source
-	invoice's paid amount (which may include change given or partial credit).
+	Return creation is delegated to ERPNext's own ``make_sales_return`` — the
+	same entry point the POS page calls — so item negation, taxes and return
+	linkage track upstream. The item selection is applied to the draft it
+	returns; payments are then re-derived from the returned rows' own
+	recalculated totals, capped at what the customer tendered (see
+	``_set_return_payments``) — never scaled off the source invoice's paid
+	amount (which may include change given or partial credit).
+
+	Over-quantity or otherwise invalid selections are rejected by ERPNext's own
+	controller validation when the return is submitted — no duplicated
+	returnable-qty checks here by design.
 
 	args:
 	        invoice_name: Name of the submitted POS Invoice to return against
@@ -253,13 +261,20 @@ def process_pos_refund(invoice_name: str, return_items: str, company: str | None
 			frappe.throw(_("Each return item must be an object with item_name and qty."))
 
 	seen_item_names = set()
+	selected_qty = {}
 	for ri in return_items:
 		item_name = ri.get("item_name")
 		if not isinstance(item_name, str):
 			frappe.throw(_("Each return item must have a valid item_name."))
+		if not item_name:
+			frappe.throw(_("Each return item must have an item_name."))
 		if item_name in seen_item_names:
 			frappe.throw(_("Duplicate item {0} in return items.").format(item_name))
 		seen_item_names.add(item_name)
+		qty = flt(ri.get("qty", 0))
+		if qty <= 0:
+			frappe.throw(_("Return quantity must be greater than zero for item {0}.").format(item_name))
+		selected_qty[item_name] = qty
 
 	source_doc = frappe.get_doc("POS Invoice", invoice_name)
 
@@ -274,56 +289,20 @@ def process_pos_refund(invoice_name: str, return_items: str, company: str | None
 	if source_doc.is_return:
 		frappe.throw(_("Cannot return a return invoice."))
 
-	# Validate all items exist and quantities are within returnable limits
-	source_items_by_name = {item.name: item for item in source_doc.items}
-	validated_qty = {}
-	for ri in return_items:
-		item_name = ri.get("item_name")
-		qty = flt(ri.get("qty", 0))
-		if not item_name:
-			frappe.throw(_("Each return item must have an item_name."))
-		if qty <= 0:
-			frappe.throw(_("Return quantity must be greater than zero for item {0}.").format(item_name))
-		if item_name not in source_items_by_name:
-			frappe.throw(_("Item {0} not found in invoice {1}.").format(item_name, invoice_name))
-		source_item = source_items_by_name[item_name]
-		item_qty = abs(source_item.qty) if source_item.qty else 0
-		returned = get_invoice_item_returned_qty("POS Invoice", invoice_name, source_doc.customer, item_name)
-		returned_qty = abs(returned.qty) if returned and returned.qty else 0
-		max_returnable = item_qty - returned_qty
-		if qty > max_returnable:
-			frappe.throw(
-				_("Return quantity {0} for item {1} exceeds maximum returnable quantity {2}.").format(
-					qty, item_name, max_returnable
-				)
-			)
-		validated_qty[item_name] = qty
-
-	# Get all source item names for comparison
-	all_source_item_names = [item.name for item in source_doc.items]
-	return_item_names = [ri["item_name"] for ri in return_items]
-	is_partial = len(return_item_names) < len(all_source_item_names) or any(
-		abs(validated_qty[name] - abs(source_items_by_name[name].qty or 0)) > 0.001
-		for name in return_item_names
-	)
-
-	# Create the return document via ERPNext's standard mechanism
-	target_doc = make_return_doc("POS Invoice", invoice_name, target_doc=None)
+	# Draft the return via ERPNext's own POS entry point (the same call the POS page makes).
+	target_doc = make_sales_return(invoice_name)
 	if not target_doc:
 		frappe.throw(_("Could not create return invoice."))
 
 	frappe.has_permission("POS Invoice", "create", doc=target_doc, throw=True)
 
-	_set_return_payments(target_doc, source_doc)
-
-	if is_partial:
-		# Remove items not in return_items and adjust quantities
+	try:
+		# Keep only selected rows at the selected (negative) quantities.
 		items_to_keep = []
 		for item in target_doc.items:
 			source_item_name = getattr(item, "pos_invoice_item", None) or item.name
-			match = next((ri for ri in return_items if ri["item_name"] == source_item_name), None)
-			if match:
-				item.qty = -abs(match["qty"])
+			if source_item_name in selected_qty:
+				item.qty = -abs(selected_qty[source_item_name])
 				item.amount = item.rate * item.qty if item.rate else 0
 				items_to_keep.append(item)
 
@@ -335,8 +314,16 @@ def process_pos_refund(invoice_name: str, return_items: str, company: str | None
 
 		_set_return_payments(target_doc, source_doc)
 
-	target_doc.save()
-	target_doc.submit()
+		target_doc.save()
+		target_doc.submit()
+	except Exception:
+		# Never leave a stray draft behind: drop the return if it was saved as a draft.
+		try:
+			if target_doc and target_doc.docstatus == 0 and frappe.db.exists("POS Invoice", target_doc.name):
+				frappe.delete_doc("POS Invoice", target_doc.name, ignore_permissions=False)
+		except Exception:
+			pass
+		raise
 
 	return {"return_invoice": target_doc.name}
 
