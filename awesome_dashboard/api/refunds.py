@@ -66,7 +66,7 @@ def get_pos_invoices_for_refund(
 			"owner",
 		],
 		order_by="posting_date desc, posting_time desc",
-		limit=cint(limit),
+		limit=cint(limit) or 200,
 	)
 
 	# Filter to only returnable invoices (excludes already-returned, drafts, etc.)
@@ -165,7 +165,7 @@ def process_pos_refund(invoice_name, return_items, company=None):
 	"""
 	try:
 		return_items = json.loads(return_items)
-	except ValueError:
+	except (ValueError, TypeError):
 		frappe.throw("Invalid return items payload.")
 
 	if not return_items or not isinstance(return_items, list):
@@ -178,13 +178,15 @@ def process_pos_refund(invoice_name, return_items, company=None):
 	seen_item_names = set()
 	for ri in return_items:
 		item_name = ri.get("item_name")
-		if item_name and item_name in seen_item_names:
+		if not isinstance(item_name, str):
+			frappe.throw("Each return item must have a valid item_name.")
+		if item_name in seen_item_names:
 			frappe.throw(f"Duplicate item {item_name} in return items.")
 		seen_item_names.add(item_name)
 
 	source_doc = frappe.get_doc("POS Invoice", invoice_name)
 
-	frappe.has_permission("POS Invoice", "submit", doc=source_doc, throw=True)
+	frappe.has_permission("POS Invoice", "read", doc=source_doc, throw=True)
 
 	if company and source_doc.company != company:
 		frappe.throw(f"Invoice {source_doc.name} does not belong to company {company}.")
@@ -230,6 +232,8 @@ def process_pos_refund(invoice_name, return_items, company=None):
 	target_doc = make_return_doc("POS Invoice", invoice_name, target_doc=None)
 	if not target_doc:
 		frappe.throw("Could not create return invoice.")
+
+	frappe.has_permission("POS Invoice", "create", doc=target_doc, throw=True)
 
 	if is_partial:
 		# Remove items not in return_items and adjust quantities
@@ -313,5 +317,5 @@ def get_refunds_for_period(company, from_date, to_date, limit=200):
 			"owner",
 		],
 		order_by="posting_date desc, posting_time desc",
-		limit=cint(limit),
+		limit=cint(limit) or 200,
 	)
