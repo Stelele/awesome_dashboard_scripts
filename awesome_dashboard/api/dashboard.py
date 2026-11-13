@@ -1,4 +1,5 @@
 import frappe
+from frappe import _
 
 from awesome_dashboard.api._utils import sanitize_time_grouping
 
@@ -23,7 +24,9 @@ def _build_expense_account_conditions(company, params, conditions):
 	stock = _get_account_bounds(company, "Stock Expenses")
 
 	if not indirect and not direct:
-		frappe.throw(f"Could not find 'Indirect Expenses' or 'Direct Expenses' roots for company {company}")
+		frappe.throw(
+			_("Could not find 'Indirect Expenses' or 'Direct Expenses' roots for company {0}").format(company)
+		)
 
 	if indirect:
 		conditions.append("(acc.lft BETWEEN %s AND %s)")
@@ -39,7 +42,7 @@ def _build_expense_account_conditions(company, params, conditions):
 
 
 @frappe.whitelist(allow_guest=False)
-def grouped_sales_summary(from_date, to_date, company, time_grouping):
+def grouped_sales_summary(from_date: str, to_date: str, company: str, time_grouping: str):
 	"""Get sales grouped by time period.
 
 	args:
@@ -68,7 +71,7 @@ def grouped_sales_summary(from_date, to_date, company, time_grouping):
 
 
 @frappe.whitelist(allow_guest=False)
-def grouped_expenses_summary(from_date, to_date, company, time_grouping):
+def grouped_expenses_summary(from_date: str, to_date: str, company: str, time_grouping: str):
 	"""Get expenses (Direct + Indirect, excluding Stock) grouped by time period.
 
 	args:
@@ -80,7 +83,7 @@ def grouped_expenses_summary(from_date, to_date, company, time_grouping):
 	time_grouping = sanitize_time_grouping(time_grouping)
 
 	if not from_date or not to_date or not company:
-		frappe.throw("from_date, to_date and company are required")
+		frappe.throw(_("from_date, to_date and company are required"))
 
 	params = [company, from_date, to_date]
 	conditions = []
@@ -111,7 +114,14 @@ def grouped_expenses_summary(from_date, to_date, company, time_grouping):
 
 
 @frappe.whitelist(allow_guest=False)
-def dashboard_complete(from_date, to_date, prev_from_date, prev_to_date, company, warehouse=None):
+def dashboard_complete(
+	from_date: str,
+	to_date: str,
+	prev_from_date: str,
+	prev_to_date: str,
+	company: str,
+	warehouse: str | None = None,
+):
 	"""Get complete dashboard metrics: sales, purchases, expenses, profits, stock.
 
 	args:
@@ -443,7 +453,7 @@ def dashboard_complete(from_date, to_date, prev_from_date, prev_to_date, company
 
 
 @frappe.whitelist(allow_guest=False)
-def dashboard_bar_chart(from_date, to_date, grouping, company):
+def dashboard_bar_chart(from_date: str, to_date: str, grouping: str, company: str):
 	"""Get sales as bar chart data grouped by day/week/month/quarter.
 
 	args:
@@ -453,7 +463,7 @@ def dashboard_bar_chart(from_date, to_date, grouping, company):
 	        company: Company name
 	"""
 	if not from_date or not to_date or not grouping or not company:
-		frappe.throw("from_date, to_date, grouping, and company are required")
+		frappe.throw(_("from_date, to_date, grouping, and company are required"))
 
 	format_map = {
 		"day": "DATE(posting_date)",
@@ -464,7 +474,7 @@ def dashboard_bar_chart(from_date, to_date, grouping, company):
 
 	sql_expr = format_map.get(grouping)
 	if not sql_expr:
-		frappe.throw(f"Invalid grouping '{grouping}'. Allowed: {list(format_map.keys())}")
+		frappe.throw(_("Invalid grouping '{0}'. Allowed: {1}.").format(grouping, list(format_map.keys())))
 
 	raw_rows = frappe.db.sql(
 		f"""
@@ -496,7 +506,7 @@ def dashboard_bar_chart(from_date, to_date, grouping, company):
 
 
 @frappe.whitelist(allow_guest=False)
-def dashboard_sales_aggregated(from_date, to_date, company):
+def dashboard_sales_aggregated(from_date: str, to_date: str, company: str):
 	"""Get sales aggregated by posting date, item name and item group.
 
 	args:
@@ -524,7 +534,7 @@ def dashboard_sales_aggregated(from_date, to_date, company):
 
 
 @frappe.whitelist(allow_guest=False)
-def dashboard_expense_breakdown(from_date, to_date, company):
+def dashboard_expense_breakdown(from_date: str, to_date: str, company: str):
 	"""Get expense breakdown by account for Direct + Indirect Expenses (excluding Stock).
 
 	args:
@@ -561,7 +571,7 @@ def dashboard_expense_breakdown(from_date, to_date, company):
 
 
 @frappe.whitelist(allow_guest=False)
-def dashboard_order_breakdown(from_date, to_date, company):
+def dashboard_order_breakdown(from_date: str, to_date: str, company: str):
 	"""Get purchase invoice breakdown by supplier.
 
 	args:
@@ -586,7 +596,7 @@ def dashboard_order_breakdown(from_date, to_date, company):
 
 
 @frappe.whitelist(allow_guest=False)
-def dashboard_payment_entries(from_date, to_date, company):
+def dashboard_payment_entries(from_date: str, to_date: str, company: str):
 	"""Get expense journal entries and purchase invoices as payment entries.
 
 	args:

@@ -1,8 +1,11 @@
 import frappe
+from frappe import _
 
 
 @frappe.whitelist(allow_guest=False)
-def create_item(company, item_name, item_group, buying_price=0, selling_price=0):
+def create_item(
+	company: str, item_name: str, item_group: str, buying_price: float = 0, selling_price: float = 0
+):
 	"""Create an item with optional buying and selling prices.
 
 	args:
@@ -18,15 +21,15 @@ def create_item(company, item_name, item_group, buying_price=0, selling_price=0)
 	item_group = item_group.strip() if item_group else ""
 
 	if not company:
-		frappe.throw("Company is required")
+		frappe.throw(_("Company is required"))
 	if not item_name:
-		frappe.throw("Item name is required")
+		frappe.throw(_("Item name is required"))
 	if not item_group:
-		frappe.throw("Item group is required")
+		frappe.throw(_("Item group is required"))
 	if not frappe.db.exists("Item Group", item_group):
-		frappe.throw(f"Item group '{item_group}' does not exist")
+		frappe.throw(_("Item group '{0}' does not exist").format(item_group))
 	if frappe.db.exists("Item", item_name):
-		frappe.throw(f"Item '{item_name}' already exists")
+		frappe.throw(_("Item '{0}' already exists").format(item_name))
 
 	try:
 		item = frappe.get_doc(
@@ -86,7 +89,7 @@ def create_item(company, item_name, item_group, buying_price=0, selling_price=0)
 
 
 @frappe.whitelist(allow_guest=False)
-def search_items(company, query=""):
+def search_items(company: str, query: str = ""):
 	"""Search items by name with current buying and selling prices.
 
 	args:
@@ -94,7 +97,7 @@ def search_items(company, query=""):
 	        query: (optional) Search term to filter item names
 	"""
 	if not company:
-		frappe.throw("Company is required")
+		frappe.throw(_("Company is required"))
 
 	filters = {"disabled": 0}
 	if query:
