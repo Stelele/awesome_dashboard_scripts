@@ -1,8 +1,9 @@
 import frappe
+from frappe import _
 
 
 @frappe.whitelist(allow_guest=False)
-def account_names(company, include_groups=False):
+def account_names(company: str, include_groups: bool = False):
 	"""Get expense and income account names for a company.
 
 	args:
@@ -11,7 +12,7 @@ def account_names(company, include_groups=False):
 	                       Defaults to False (leaf accounts only).
 	"""
 	if not company:
-		frappe.throw("Company is required")
+		frappe.throw(_("Company is required"))
 
 	expense_filters = {"company": company, "root_type": "Expense"}
 	income_filters = {"company": company, "root_type": "Income"}
@@ -30,7 +31,7 @@ def account_names(company, include_groups=False):
 
 
 @frappe.whitelist(allow_guest=False)
-def get_journal_entries(company, start_date, end_date):
+def get_journal_entries(company: str, start_date: str, end_date: str):
 	"""Get journal entries for a company within a date range.
 
 	args:
@@ -39,7 +40,7 @@ def get_journal_entries(company, start_date, end_date):
 	        end_date: End date (YYYY-MM-DD)
 	"""
 	if not company or not start_date or not end_date:
-		frappe.throw("Missing required parameters: company, start_date, and end_date")
+		frappe.throw(_("Missing required parameters: company, start_date, and end_date"))
 
 	query = """
 		SELECT
@@ -73,7 +74,13 @@ def get_journal_entries(company, start_date, end_date):
 
 @frappe.whitelist(allow_guest=False)
 def amend_expense_journal_entry(
-	journal_entry, amount, description, expense_account, income_account, posting_date, company
+	journal_entry: str,
+	amount: float,
+	description: str,
+	expense_account: str,
+	income_account: str,
+	posting_date: str,
+	company: str,
 ):
 	"""Cancel and recreate a journal entry with new values.
 
@@ -89,30 +96,30 @@ def amend_expense_journal_entry(
 	amount = float(amount or 0)
 
 	if not journal_entry:
-		frappe.throw("journal_entry is required")
+		frappe.throw(_("journal_entry is required"))
 	if amount <= 0:
-		frappe.throw("amount must be greater than 0")
+		frappe.throw(_("amount must be greater than 0"))
 	if not expense_account:
-		frappe.throw("expense_account is required")
+		frappe.throw(_("expense_account is required"))
 	if not income_account:
-		frappe.throw("income_account is required")
+		frappe.throw(_("income_account is required"))
 	if not posting_date:
-		frappe.throw("posting_date is required")
+		frappe.throw(_("posting_date is required"))
 	if not company:
-		frappe.throw("company is required")
+		frappe.throw(_("company is required"))
 
 	if not frappe.db.exists("Company", company):
-		frappe.throw(f"Company '{company}' does not exist")
+		frappe.throw(_("Company '{0}' does not exist").format(company))
 	if not frappe.db.exists("Account", expense_account):
-		frappe.throw(f"Account '{expense_account}' does not exist")
+		frappe.throw(_("Account '{0}' does not exist").format(expense_account))
 	if not frappe.db.exists("Account", income_account):
-		frappe.throw(f"Account '{income_account}' does not exist")
+		frappe.throw(_("Account '{0}' does not exist").format(income_account))
 	if not frappe.db.exists("Journal Entry", journal_entry):
-		frappe.throw(f"Journal Entry '{journal_entry}' does not exist")
+		frappe.throw(_("Journal Entry '{0}' does not exist").format(journal_entry))
 
 	docstatus = frappe.db.get_value("Journal Entry", journal_entry, "docstatus")
 	if docstatus != 1:
-		frappe.throw(f"Journal Entry '{journal_entry}' is not in Submitted state")
+		frappe.throw(_("Journal Entry '{0}' is not in Submitted state").format(journal_entry))
 
 	try:
 		je = frappe.get_doc("Journal Entry", journal_entry)

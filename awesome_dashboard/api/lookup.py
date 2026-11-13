@@ -1,8 +1,9 @@
 import frappe
+from frappe import _
 
 
 @frappe.whitelist(allow_guest=False)
-def search_suppliers(company, query=""):
+def search_suppliers(company: str, query: str = ""):
 	"""Search suppliers by name.
 
 	args:
@@ -10,7 +11,7 @@ def search_suppliers(company, query=""):
 	        query: (optional) Search term to filter supplier names
 	"""
 	if not company:
-		frappe.throw("Company is required")
+		frappe.throw(_("Company is required"))
 
 	filters = {"disabled": 0}
 	if query:
@@ -24,14 +25,14 @@ def search_suppliers(company, query=""):
 
 
 @frappe.whitelist(allow_guest=False)
-def search_warehouses(company):
+def search_warehouses(company: str):
 	"""List all non-group warehouses for a company.
 
 	args:
 	        company: Company name
 	"""
 	if not company:
-		frappe.throw("Company is required")
+		frappe.throw(_("Company is required"))
 
 	warehouses = frappe.get_all(
 		"Warehouse", filters={"company": company, "is_group": 0}, fields=["name"], order_by="name"

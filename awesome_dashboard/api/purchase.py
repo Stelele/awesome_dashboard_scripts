@@ -1,36 +1,37 @@
 import frappe
+from frappe import _
 
 
 def _validate_purchase_inputs(company, supplier, warehouse, items, invoice_number, amended_from=None):
 	if not company:
-		frappe.throw("Company is required")
+		frappe.throw(_("Company is required"))
 	if not frappe.db.exists("Company", company):
-		frappe.throw(f"Company '{company}' does not exist")
+		frappe.throw(_("Company '{0}' does not exist").format(company))
 
 	if not supplier:
-		frappe.throw("Supplier is required")
+		frappe.throw(_("Supplier is required"))
 	if not frappe.db.exists("Supplier", supplier):
-		frappe.throw(f"Supplier '{supplier}' does not exist")
+		frappe.throw(_("Supplier '{0}' does not exist").format(supplier))
 
 	if not warehouse:
-		frappe.throw("Warehouse is required")
+		frappe.throw(_("Warehouse is required"))
 	if not frappe.db.exists("Warehouse", warehouse):
-		frappe.throw(f"Warehouse '{warehouse}' does not exist")
+		frappe.throw(_("Warehouse '{0}' does not exist").format(warehouse))
 
 	if not items or not isinstance(items, list) or len(items) == 0:
-		frappe.throw("At least one item is required")
+		frappe.throw(_("At least one item is required"))
 
 	for item in items:
 		if not isinstance(item, dict):
-			frappe.throw("Each item must be a dictionary with item_code, qty, and rate")
+			frappe.throw(_("Each item must be a dictionary with item_code, qty, and rate"))
 		if not item.get("item_code"):
-			frappe.throw("item_code is required for each item")
+			frappe.throw(_("item_code is required for each item"))
 		if not frappe.db.exists("Item", item["item_code"]):
-			frappe.throw(f"Item '{item['item_code']}' does not exist")
+			frappe.throw(_("Item '{0}' does not exist").format(item["item_code"]))
 		if not item.get("qty") or float(item["qty"] or 0) <= 0:
-			frappe.throw(f"qty must be greater than 0 for item '{item['item_code']}'")
+			frappe.throw(_("qty must be greater than 0 for item '{0}'.").format(item["item_code"]))
 		if item.get("rate") is None or float(item["rate"] or 0) < 0:
-			frappe.throw(f"rate must be 0 or greater for item '{item['item_code']}'")
+			frappe.throw(_("rate must be 0 or greater for item '{0}'.").format(item["item_code"]))
 
 	if invoice_number:
 		existing = frappe.db.exists(
@@ -38,7 +39,9 @@ def _validate_purchase_inputs(company, supplier, warehouse, items, invoice_numbe
 		)
 		if existing and existing != amended_from:
 			frappe.throw(
-				f"Purchase Invoice with invoice_number '{invoice_number}' already exists for this supplier"
+				_("Purchase Invoice with invoice_number '{0}' already exists for this supplier").format(
+					invoice_number
+				)
 			)
 
 
@@ -138,7 +141,7 @@ def _create_payment_entry(pi, invoice_date, company):
 			"Account", {"company": company, "account_type": "Cash", "is_group": 0}, "name"
 		)
 	if not default_cash_account:
-		frappe.throw(f"No default cash account found for company '{company}'")
+		frappe.throw(_("No default cash account found for company '{0}'").format(company))
 
 	default_payable = frappe.db.get_value("Company", company, "default_payable_account")
 	if not default_payable:
@@ -146,10 +149,10 @@ def _create_payment_entry(pi, invoice_date, company):
 			"Account", {"company": company, "account_type": "Payable", "is_group": 0}, "name"
 		)
 	if not default_payable:
-		frappe.throw(f"No default payable account found for company '{company}'")
+		frappe.throw(_("No default payable account found for company '{0}'").format(company))
 
 	if not frappe.db.exists("Mode of Payment", "Cash"):
-		frappe.throw("Mode of Payment 'Cash' does not exist. Please create it first.")
+		frappe.throw(_("Mode of Payment 'Cash' does not exist. Please create it first."))
 
 	pe = frappe.get_doc(
 		{
@@ -227,7 +230,14 @@ def _update_item_prices(items):
 
 
 @frappe.whitelist(allow_guest=False)
-def create_full_purchase(company, supplier, warehouse, items, invoice_number=None, invoice_date=None):
+def create_full_purchase(
+	company: str,
+	supplier: str,
+	warehouse: str,
+	items: list,
+	invoice_number: str | None = None,
+	invoice_date: str | None = None,
+):
 	"""Create full purchase cycle: Purchase Order → Purchase Receipt → Purchase Invoice → Payment Entry.
 
 	args:
@@ -268,29 +278,29 @@ def create_full_purchase(company, supplier, warehouse, items, invoice_number=Non
 
 
 @frappe.whitelist(allow_guest=False)
-def cancel_full_purchase(purchase_invoice):
+def cancel_full_purchase(purchase_invoice: str):
 	"""Cancel full purchase cycle: Payment Entry → Purchase Invoice → Purchase Receipt → Purchase Order.
 
 	args:
 	        purchase_invoice: Name of the Purchase Invoice to cancel
 	"""
 	if not purchase_invoice:
-		frappe.throw("purchase_invoice is required")
+		frappe.throw(_("purchase_invoice is required"))
 
 	if not frappe.db.exists("Purchase Invoice", purchase_invoice):
-		frappe.throw(f"Purchase Invoice '{purchase_invoice}' does not exist")
+		frappe.throw(_("Purchase Invoice '{0}' does not exist").format(purchase_invoice))
 
 	docstatus = frappe.db.get_value("Purchase Invoice", purchase_invoice, "docstatus")
 	if docstatus != 1:
-		frappe.throw(f"Purchase Invoice '{purchase_invoice}' is not in Submitted state")
+		frappe.throw(_("Purchase Invoice '{0}' is not in Submitted state").format(purchase_invoice))
 
 	pr_name = frappe.db.get_value("Purchase Invoice Item", {"parent": purchase_invoice}, "purchase_receipt")
 	if not pr_name:
-		frappe.throw("Could not find linked Purchase Receipt")
+		frappe.throw(_("Could not find linked Purchase Receipt"))
 
 	po_name = frappe.db.get_value("Purchase Receipt Item", {"parent": pr_name}, "purchase_order")
 	if not po_name:
-		frappe.throw("Could not find linked Purchase Order")
+		frappe.throw(_("Could not find linked Purchase Order"))
 
 	pe_name = frappe.db.get_value(
 		"Payment Entry Reference",
@@ -317,7 +327,8 @@ def cancel_full_purchase(purchase_invoice):
 	po.cancel()
 	cancelled.append(po_name)
 
-	frappe.db.commit()
+	# Durable outside the request transaction: the multi-document cancel chain must persist immediately.
+	frappe.db.commit()  # nosemgrep
 
 	return {
 		"cancelled": cancelled,
@@ -327,7 +338,13 @@ def cancel_full_purchase(purchase_invoice):
 
 @frappe.whitelist(allow_guest=False)
 def amend_full_purchase(
-	purchase_invoice, company, supplier, warehouse, items, invoice_number=None, invoice_date=None
+	purchase_invoice: str,
+	company: str,
+	supplier: str,
+	warehouse: str,
+	items: list,
+	invoice_number: str | None = None,
+	invoice_date: str | None = None,
 ):
 	"""Cancel old purchase chain and create a new one with updated details.
 
@@ -341,34 +358,34 @@ def amend_full_purchase(
 	        invoice_date: (optional) Invoice date (YYYY-MM-DD), defaults to today
 	"""
 	if not purchase_invoice:
-		frappe.throw("purchase_invoice is required")
+		frappe.throw(_("purchase_invoice is required"))
 	if not company:
-		frappe.throw("company is required")
+		frappe.throw(_("company is required"))
 	if not supplier:
-		frappe.throw("supplier is required")
+		frappe.throw(_("supplier is required"))
 	if not warehouse:
-		frappe.throw("warehouse is required")
+		frappe.throw(_("warehouse is required"))
 	if not items or not isinstance(items, list) or len(items) == 0:
-		frappe.throw("At least one item is required")
+		frappe.throw(_("At least one item is required"))
 
 	if not frappe.db.exists("Company", company):
-		frappe.throw(f"Company '{company}' does not exist")
+		frappe.throw(_("Company '{0}' does not exist").format(company))
 	if not frappe.db.exists("Supplier", supplier):
-		frappe.throw(f"Supplier '{supplier}' does not exist")
+		frappe.throw(_("Supplier '{0}' does not exist").format(supplier))
 	if not frappe.db.exists("Warehouse", warehouse):
-		frappe.throw(f"Warehouse '{warehouse}' does not exist")
+		frappe.throw(_("Warehouse '{0}' does not exist").format(warehouse))
 
 	for item in items:
 		if not isinstance(item, dict):
-			frappe.throw("Each item must be a dictionary with item_code, qty, rate, and sell_rate")
+			frappe.throw(_("Each item must be a dictionary with item_code, qty, rate, and sell_rate"))
 		if not item.get("item_code"):
-			frappe.throw("item_code is required for each item")
+			frappe.throw(_("item_code is required for each item"))
 		if not frappe.db.exists("Item", item["item_code"]):
-			frappe.throw(f"Item '{item['item_code']}' does not exist")
+			frappe.throw(_("Item '{0}' does not exist").format(item["item_code"]))
 		if not item.get("qty") or float(item["qty"] or 0) <= 0:
-			frappe.throw(f"qty must be greater than 0 for item '{item['item_code']}'")
+			frappe.throw(_("qty must be greater than 0 for item '{0}'.").format(item["item_code"]))
 		if item.get("rate") is None or float(item["rate"] or 0) < 0:
-			frappe.throw(f"rate must be 0 or greater for item '{item['item_code']}'")
+			frappe.throw(_("rate must be 0 or greater for item '{0}'.").format(item["item_code"]))
 
 	if invoice_number:
 		existing = frappe.db.exists(
@@ -376,15 +393,17 @@ def amend_full_purchase(
 		)
 		if existing and existing != purchase_invoice:
 			frappe.throw(
-				f"Purchase Invoice with invoice_number '{invoice_number}' already exists for this supplier"
+				_("Purchase Invoice with invoice_number '{0}' already exists for this supplier").format(
+					invoice_number
+				)
 			)
 
 	if not frappe.db.exists("Purchase Invoice", purchase_invoice):
-		frappe.throw(f"Purchase Invoice '{purchase_invoice}' does not exist")
+		frappe.throw(_("Purchase Invoice '{0}' does not exist").format(purchase_invoice))
 
 	docstatus = frappe.db.get_value("Purchase Invoice", purchase_invoice, "docstatus")
 	if docstatus != 1:
-		frappe.throw(f"Purchase Invoice '{purchase_invoice}' is not in Submitted state")
+		frappe.throw(_("Purchase Invoice '{0}' is not in Submitted state").format(purchase_invoice))
 
 	if not invoice_date:
 		invoice_date = frappe.utils.nowdate()
@@ -394,11 +413,11 @@ def amend_full_purchase(
 			"Purchase Invoice Item", {"parent": purchase_invoice}, "purchase_receipt"
 		)
 		if not pr_name:
-			frappe.throw("Could not find linked Purchase Receipt")
+			frappe.throw(_("Could not find linked Purchase Receipt"))
 
 		po_name = frappe.db.get_value("Purchase Receipt Item", {"parent": pr_name}, "purchase_order")
 		if not po_name:
-			frappe.throw("Could not find linked Purchase Order")
+			frappe.throw(_("Could not find linked Purchase Order"))
 
 		pe_name = frappe.db.get_value(
 			"Payment Entry Reference",

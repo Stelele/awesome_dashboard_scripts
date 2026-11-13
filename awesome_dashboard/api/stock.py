@@ -1,10 +1,11 @@
 import frappe
+from frappe import _
 
 from awesome_dashboard.api._utils import sanitize_time_grouping
 
 
 @frappe.whitelist(allow_guest=False)
-def get_stock_levels(warehouse, company, pack_size_map=None):
+def get_stock_levels(warehouse: str, company: str, pack_size_map: dict | None = None):
 	"""Get current stock levels for a warehouse, with optional pack-size calculation.
 
 	args:
@@ -14,7 +15,7 @@ def get_stock_levels(warehouse, company, pack_size_map=None):
 	                      e.g. {"Pint": 24, "Quart": 12} computes pack_size = real_qty / divisor.
 	"""
 	if not warehouse or not company:
-		frappe.throw("Both 'warehouse' and 'company' are required")
+		frappe.throw(_("Both 'warehouse' and 'company' are required"))
 
 	wh_name = frappe.db.get_value("Warehouse", {"warehouse_name": warehouse, "company": company}, "name")
 	if not wh_name:
@@ -107,7 +108,7 @@ def get_stock_levels(warehouse, company, pack_size_map=None):
 
 
 @frappe.whitelist(allow_guest=False)
-def get_average_stock_value(from_date, to_date, company, time_grouping):
+def get_average_stock_value(from_date: str, to_date: str, company: str, time_grouping: str):
 	"""Get average stock value per time period using running balance.
 
 	args:
@@ -160,7 +161,7 @@ def get_average_stock_value(from_date, to_date, company, time_grouping):
 
 
 @frappe.whitelist(allow_guest=False)
-def get_daily_stock_value(from_date, to_date, company):
+def get_daily_stock_value(from_date: str, to_date: str, company: str):
 	"""Get daily stock value with days-from-end calculation.
 
 	args:
