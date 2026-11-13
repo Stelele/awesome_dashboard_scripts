@@ -170,10 +170,13 @@ def _set_return_payments(target_doc, source_doc):
 	``make_return_doc`` copies ``-source.paid_amount`` verbatim, which breaks invoices
 	where paid != grand_total (change given, partial credit), so both refund paths
 	re-derive payments here: the returned rows' recalculated value, capped at what the
-	customer actually tendered, allocated across the source payment rows with the last
-	row absorbing the remainder so the sum is exactly ``-refund_total``.
+	customer actually tendered, allocated across the source payment rows — each row
+	capped at its own tendered share and rounded to currency precision, with the
+	largest-tendered row absorbing the final remainder uncapped so the rows sum to
+	exactly ``-refund_total``.
 	"""
-	refund_total = min(abs(flt(target_doc.grand_total)), abs(flt(source_doc.paid_amount)))
+	precision = source_doc.precision("paid_amount")
+	refund_total = flt(min(abs(flt(target_doc.grand_total)), abs(flt(source_doc.paid_amount))), precision)
 	tendered = sum(abs(flt(p.amount)) for p in source_doc.payments)
 
 	target_doc.set("payments", [])
@@ -182,16 +185,26 @@ def _set_return_payments(target_doc, source_doc):
 		target_doc.base_paid_amount = 0
 		return
 
-	remaining = refund_total
-	source_payments = list(source_doc.payments)
-	for i, payment in enumerate(source_payments):
-		if i == len(source_payments) - 1:
-			amount = remaining
-		else:
-			amount = min(abs(flt(payment.amount)) / tendered * refund_total, remaining)
-			remaining -= amount
+	# Absorber takes the final remainder uncapped so the rows sum exactly.
+	absorber_idx = max(range(len(source_doc.payments)), key=lambda i: abs(flt(source_doc.payments[i].amount)))
+
+	allocated = []
+	allocated_sum = 0.0
+	for i, payment in enumerate(source_doc.payments):
+		if i == absorber_idx:
+			continue
+		share = min(abs(flt(payment.amount)) / tendered * refund_total, refund_total - allocated_sum)
+		amount = min(flt(share, precision), flt(refund_total - allocated_sum, precision))
 		if not amount:
 			continue
+		allocated.append((payment, amount))
+		allocated_sum += amount
+
+	absorber_amount = flt(refund_total - allocated_sum, precision)
+	if absorber_amount:
+		allocated.append((source_doc.payments[absorber_idx], absorber_amount))
+
+	for payment, amount in allocated:
 		target_doc.append(
 			"payments",
 			{
