@@ -43,49 +43,53 @@ def _validate_purchase_inputs(company, supplier, warehouse, items, invoice_numbe
 
 
 def _create_purchase_order(company, supplier, warehouse, items, invoice_date):
-	po = frappe.get_doc({
-		"doctype": "Purchase Order",
-		"company": company,
-		"supplier": supplier,
-		"transaction_date": invoice_date,
-		"schedule_date": invoice_date,
-		"set_warehouse": warehouse,
-		"items": [
-			{
-				"item_code": item["item_code"],
-				"qty": float(item["qty"] or 0),
-				"rate": float(item["rate"] or 0),
-				"warehouse": warehouse,
-			}
-			for item in items
-		],
-	})
+	po = frappe.get_doc(
+		{
+			"doctype": "Purchase Order",
+			"company": company,
+			"supplier": supplier,
+			"transaction_date": invoice_date,
+			"schedule_date": invoice_date,
+			"set_warehouse": warehouse,
+			"items": [
+				{
+					"item_code": item["item_code"],
+					"qty": float(item["qty"] or 0),
+					"rate": float(item["rate"] or 0),
+					"warehouse": warehouse,
+				}
+				for item in items
+			],
+		}
+	)
 	po.insert()
 	po.submit()
 	return po
 
 
 def _create_purchase_receipt(po, invoice_date):
-	pr = frappe.get_doc({
-		"doctype": "Purchase Receipt",
-		"company": po.company,
-		"supplier": po.supplier,
-		"posting_date": invoice_date,
-		"posting_time": "00:00:00",
-		"set_warehouse": po.set_warehouse,
-		"purchase_order": po.name,
-		"items": [
-			{
-				"item_code": item.item_code,
-				"qty": item.qty,
-				"rate": item.rate,
-				"warehouse": item.warehouse,
-				"purchase_order": po.name,
-				"purchase_order_item": item.name,
-			}
-			for item in po.items
-		],
-	})
+	pr = frappe.get_doc(
+		{
+			"doctype": "Purchase Receipt",
+			"company": po.company,
+			"supplier": po.supplier,
+			"posting_date": invoice_date,
+			"posting_time": "00:00:00",
+			"set_warehouse": po.set_warehouse,
+			"purchase_order": po.name,
+			"items": [
+				{
+					"item_code": item.item_code,
+					"qty": item.qty,
+					"rate": item.rate,
+					"warehouse": item.warehouse,
+					"purchase_order": po.name,
+					"purchase_order_item": item.name,
+				}
+				for item in po.items
+			],
+		}
+	)
 	pr.insert()
 	pr.submit()
 	return pr
@@ -147,32 +151,34 @@ def _create_payment_entry(pi, invoice_date, company):
 	if not frappe.db.exists("Mode of Payment", "Cash"):
 		frappe.throw("Mode of Payment 'Cash' does not exist. Please create it first.")
 
-	pe = frappe.get_doc({
-		"doctype": "Payment Entry",
-		"company": company,
-		"payment_type": "Pay",
-		"party_type": "Supplier",
-		"party": pi.supplier,
-		"party_name": supplier_name,
-		"posting_date": invoice_date,
-		"mode_of_payment": "Cash",
-		"paid_from": default_cash_account,
-		"paid_to": default_payable,
-		"paid_amount": pi.grand_total,
-		"received_amount": pi.grand_total,
-		"reference_no": pi.bill_no or pi.name,
-		"reference_date": pi.bill_date,
-		"references": [
-			{
-				"reference_doctype": "Purchase Invoice",
-				"reference_name": pi.name,
-				"total_amount": pi.grand_total,
-				"outstanding_amount": pi.outstanding_amount,
-				"allocated_amount": pi.grand_total,
-				"exchange_rate": 1,
-			}
-		],
-	})
+	pe = frappe.get_doc(
+		{
+			"doctype": "Payment Entry",
+			"company": company,
+			"payment_type": "Pay",
+			"party_type": "Supplier",
+			"party": pi.supplier,
+			"party_name": supplier_name,
+			"posting_date": invoice_date,
+			"mode_of_payment": "Cash",
+			"paid_from": default_cash_account,
+			"paid_to": default_payable,
+			"paid_amount": pi.grand_total,
+			"received_amount": pi.grand_total,
+			"reference_no": pi.bill_no or pi.name,
+			"reference_date": pi.bill_date,
+			"references": [
+				{
+					"reference_doctype": "Purchase Invoice",
+					"reference_name": pi.name,
+					"total_amount": pi.grand_total,
+					"outstanding_amount": pi.outstanding_amount,
+					"allocated_amount": pi.grand_total,
+					"exchange_rate": 1,
+				}
+			],
+		}
+	)
 	pe.insert()
 	pe.submit()
 	return pe
@@ -191,13 +197,15 @@ def _update_item_prices(items):
 			if existing_buy:
 				frappe.db.set_value("Item Price", existing_buy, "price_list_rate", buy_rate)
 			else:
-				frappe.get_doc({
-					"doctype": "Item Price",
-					"item_code": item["item_code"],
-					"price_list": buying_pl,
-					"buying": 1,
-					"price_list_rate": buy_rate,
-				}).insert()
+				frappe.get_doc(
+					{
+						"doctype": "Item Price",
+						"item_code": item["item_code"],
+						"price_list": buying_pl,
+						"buying": 1,
+						"price_list_rate": buy_rate,
+					}
+				).insert()
 
 		sell_rate = float(item.get("sell_rate") or 0)
 		if sell_rate > 0:
@@ -207,13 +215,15 @@ def _update_item_prices(items):
 			if existing_sell:
 				frappe.db.set_value("Item Price", existing_sell, "price_list_rate", sell_rate)
 			else:
-				frappe.get_doc({
-					"doctype": "Item Price",
-					"item_code": item["item_code"],
-					"price_list": selling_pl,
-					"selling": 1,
-					"price_list_rate": sell_rate,
-				}).insert()
+				frappe.get_doc(
+					{
+						"doctype": "Item Price",
+						"item_code": item["item_code"],
+						"price_list": selling_pl,
+						"selling": 1,
+						"price_list_rate": sell_rate,
+					}
+				).insert()
 
 
 @frappe.whitelist(allow_guest=False)
@@ -239,9 +249,7 @@ def create_full_purchase(company, supplier, warehouse, items, invoice_number=Non
 		pi = _create_purchase_invoice(pr, invoice_number, invoice_date)
 		pe = _create_payment_entry(pi, invoice_date, company)
 
-		for doc, doctype in [
-			(pr, "Purchase Receipt"), (pi, "Purchase Invoice"), (pe, "Payment Entry")
-		]:
+		for doc, doctype in [(pr, "Purchase Receipt"), (pi, "Purchase Invoice"), (pe, "Payment Entry")]:
 			frappe.db.set_value(doctype, doc.name, "posting_date", invoice_date)
 
 		frappe.db.commit()
@@ -276,9 +284,7 @@ def cancel_full_purchase(purchase_invoice):
 	if docstatus != 1:
 		frappe.throw(f"Purchase Invoice '{purchase_invoice}' is not in Submitted state")
 
-	pr_name = frappe.db.get_value(
-		"Purchase Invoice Item", {"parent": purchase_invoice}, "purchase_receipt"
-	)
+	pr_name = frappe.db.get_value("Purchase Invoice Item", {"parent": purchase_invoice}, "purchase_receipt")
 	if not pr_name:
 		frappe.throw("Could not find linked Purchase Receipt")
 
@@ -320,7 +326,9 @@ def cancel_full_purchase(purchase_invoice):
 
 
 @frappe.whitelist(allow_guest=False)
-def amend_full_purchase(purchase_invoice, company, supplier, warehouse, items, invoice_number=None, invoice_date=None):
+def amend_full_purchase(
+	purchase_invoice, company, supplier, warehouse, items, invoice_number=None, invoice_date=None
+):
 	"""Cancel old purchase chain and create a new one with updated details.
 
 	args:
@@ -388,9 +396,7 @@ def amend_full_purchase(purchase_invoice, company, supplier, warehouse, items, i
 		if not pr_name:
 			frappe.throw("Could not find linked Purchase Receipt")
 
-		po_name = frappe.db.get_value(
-			"Purchase Receipt Item", {"parent": pr_name}, "purchase_order"
-		)
+		po_name = frappe.db.get_value("Purchase Receipt Item", {"parent": pr_name}, "purchase_order")
 		if not po_name:
 			frappe.throw("Could not find linked Purchase Order")
 
@@ -420,7 +426,9 @@ def amend_full_purchase(purchase_invoice, company, supplier, warehouse, items, i
 		new_pe = _create_payment_entry(new_pi, invoice_date, company)
 
 		for doc, doctype in [
-			(new_pr, "Purchase Receipt"), (new_pi, "Purchase Invoice"), (new_pe, "Payment Entry")
+			(new_pr, "Purchase Receipt"),
+			(new_pi, "Purchase Invoice"),
+			(new_pe, "Payment Entry"),
 		]:
 			frappe.db.set_value(doctype, doc.name, "posting_date", invoice_date)
 

@@ -16,9 +16,7 @@ def get_stock_levels(warehouse, company, pack_size_map=None):
 	if not warehouse or not company:
 		frappe.throw("Both 'warehouse' and 'company' are required")
 
-	wh_name = frappe.db.get_value(
-		"Warehouse", {"warehouse_name": warehouse, "company": company}, "name"
-	)
+	wh_name = frappe.db.get_value("Warehouse", {"warehouse_name": warehouse, "company": company}, "name")
 	if not wh_name:
 		frappe.throw(f"Warehouse '{warehouse}' not found for company '{company}'")
 
@@ -99,9 +97,7 @@ def get_stock_levels(warehouse, company, pack_size_map=None):
 				normalized[k] = {"size": int(v), "unit": "crate"}
 
 		for entry in data:
-			match = next(
-				(cfg for key, cfg in normalized.items() if key in entry.item_name), None
-			)
+			match = next((cfg for key, cfg in normalized.items() if key in entry.item_name), None)
 			if match and match["size"] > 0:
 				unit = match["unit"]
 				plural = unit if unit.endswith("s") else unit + "s"

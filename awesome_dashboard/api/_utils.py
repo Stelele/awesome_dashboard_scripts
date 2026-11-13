@@ -1,9 +1,15 @@
 import frappe
 
-_TIME_GROUPINGS = frozenset({
-	"%%Y-%%m-%%d", "%%Y-%%m", "%%Y-%%U", "%%Y",
-	"%%Y-%%m-%%d %%H:%%i:%%s", "%%H:%%i:%%s",
-})
+_TIME_GROUPINGS = frozenset(
+	{
+		"%%Y-%%m-%%d",
+		"%%Y-%%m",
+		"%%Y-%%U",
+		"%%Y",
+		"%%Y-%%m-%%d %%H:%%i:%%s",
+		"%%H:%%i:%%s",
+	}
+)
 
 
 def sanitize_time_grouping(grouping):

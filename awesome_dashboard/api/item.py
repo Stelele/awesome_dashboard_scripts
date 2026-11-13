@@ -29,40 +29,46 @@ def create_item(company, item_name, item_group, buying_price=0, selling_price=0)
 		frappe.throw(f"Item '{item_name}' already exists")
 
 	try:
-		item = frappe.get_doc({
-			"doctype": "Item",
-			"item_code": item_name,
-			"item_name": item_name,
-			"item_group": item_group,
-			"stock_uom": "Nos",
-			"is_stock_item": 1,
-			"is_purchase_item": 1,
-			"is_sales_item": 1,
-			"include_item_in_manufacturing": 0,
-		})
+		item = frappe.get_doc(
+			{
+				"doctype": "Item",
+				"item_code": item_name,
+				"item_name": item_name,
+				"item_group": item_group,
+				"stock_uom": "Nos",
+				"is_stock_item": 1,
+				"is_purchase_item": 1,
+				"is_sales_item": 1,
+				"include_item_in_manufacturing": 0,
+			}
+		)
 		item.insert(ignore_permissions=True)
 
 		buying_pl = frappe.db.get_value("Buying Settings", None, "buying_price_list") or "Standard Buying"
 		selling_pl = frappe.db.get_value("Selling Settings", None, "selling_price_list") or "Standard Selling"
 
 		if buying_price > 0:
-			buy_ip = frappe.get_doc({
-				"doctype": "Item Price",
-				"item_code": item_name,
-				"price_list": buying_pl,
-				"buying": 1,
-				"price_list_rate": buying_price,
-			})
+			buy_ip = frappe.get_doc(
+				{
+					"doctype": "Item Price",
+					"item_code": item_name,
+					"price_list": buying_pl,
+					"buying": 1,
+					"price_list_rate": buying_price,
+				}
+			)
 			buy_ip.insert(ignore_permissions=True)
 
 		if selling_price > 0:
-			sell_ip = frappe.get_doc({
-				"doctype": "Item Price",
-				"item_code": item_name,
-				"price_list": selling_pl,
-				"selling": 1,
-				"price_list_rate": selling_price,
-			})
+			sell_ip = frappe.get_doc(
+				{
+					"doctype": "Item Price",
+					"item_code": item_name,
+					"price_list": selling_pl,
+					"selling": 1,
+					"price_list_rate": selling_price,
+				}
+			)
 			sell_ip.insert(ignore_permissions=True)
 
 		frappe.db.commit()
@@ -119,12 +125,14 @@ def search_items(company, query=""):
 			)
 			or 0
 		)
-		result.append({
-			"item_code": item.item_code,
-			"item_name": item.item_name,
-			"last_purchase_rate": buy_rate,
-			"last_selling_rate": sell_rate,
-			"description": "Buy: " + str(buy_rate) + " | Sell: " + str(sell_rate),
-		})
+		result.append(
+			{
+				"item_code": item.item_code,
+				"item_name": item.item_name,
+				"last_purchase_rate": buy_rate,
+				"last_selling_rate": sell_rate,
+				"description": "Buy: " + str(buy_rate) + " | Sell: " + str(sell_rate),
+			}
+		)
 
 	return result
