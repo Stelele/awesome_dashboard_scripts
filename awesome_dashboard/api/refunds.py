@@ -6,12 +6,18 @@ from erpnext.controllers.sales_and_purchase_return import (
 	is_invoice_returnable,
 	make_return_doc,
 )
+from frappe import _
 from frappe.utils import cint, flt
 
 
 @frappe.whitelist(allow_guest=False)
 def get_pos_invoices_for_refund(
-	company, from_date=None, to_date=None, status=None, search_term=None, limit=200
+	company: str,
+	from_date: str | None = None,
+	to_date: str | None = None,
+	status: str | None = None,
+	search_term: str | None = None,
+	limit: int = 200,
 ):
 	"""Get submitted POS invoices that are still returnable.
 
@@ -24,7 +30,7 @@ def get_pos_invoices_for_refund(
 	        limit: Maximum number of invoices to fetch (default 200)
 	"""
 	if not company:
-		frappe.throw("Company is required")
+		frappe.throw(_("Company is required"))
 
 	frappe.has_permission("POS Invoice", "read", throw=True)
 
@@ -78,7 +84,7 @@ def get_pos_invoices_for_refund(
 
 
 @frappe.whitelist(allow_guest=False)
-def get_invoice_detail_for_refund(invoice_name, company=None):
+def get_invoice_detail_for_refund(invoice_name: str, company: str | None = None):
 	"""Get a POS invoice's items with returnable quantities, plus taxes and payments.
 
 	args:
@@ -90,7 +96,7 @@ def get_invoice_detail_for_refund(invoice_name, company=None):
 	frappe.has_permission("POS Invoice", "read", doc=doc, throw=True)
 
 	if company and doc.company != company:
-		frappe.throw(f"Invoice {doc.name} does not belong to company {company}.")
+		frappe.throw(_("Invoice {0} does not belong to company {1}.").format(doc.name, company))
 
 	items = []
 	for item in doc.items:
@@ -154,7 +160,7 @@ def get_invoice_detail_for_refund(invoice_name, company=None):
 
 
 @frappe.whitelist(allow_guest=False)
-def process_pos_refund(invoice_name, return_items, company=None):
+def process_pos_refund(invoice_name: str, return_items: str, company: str | None = None):
 	"""Create and submit a return POS Invoice for the given items.
 
 	args:
@@ -165,22 +171,22 @@ def process_pos_refund(invoice_name, return_items, company=None):
 	try:
 		return_items = json.loads(return_items)
 	except (ValueError, TypeError):
-		frappe.throw("Invalid return items payload.")
+		frappe.throw(_("Invalid return items payload."))
 
 	if not return_items or not isinstance(return_items, list):
-		frappe.throw("No items selected for return.")
+		frappe.throw(_("No items selected for return."))
 
 	for ri in return_items:
 		if not isinstance(ri, dict):
-			frappe.throw("Each return item must be an object with item_name and qty.")
+			frappe.throw(_("Each return item must be an object with item_name and qty."))
 
 	seen_item_names = set()
 	for ri in return_items:
 		item_name = ri.get("item_name")
 		if not isinstance(item_name, str):
-			frappe.throw("Each return item must have a valid item_name.")
+			frappe.throw(_("Each return item must have a valid item_name."))
 		if item_name in seen_item_names:
-			frappe.throw(f"Duplicate item {item_name} in return items.")
+			frappe.throw(_("Duplicate item {0} in return items.").format(item_name))
 		seen_item_names.add(item_name)
 
 	source_doc = frappe.get_doc("POS Invoice", invoice_name)
@@ -188,13 +194,13 @@ def process_pos_refund(invoice_name, return_items, company=None):
 	frappe.has_permission("POS Invoice", "read", doc=source_doc, throw=True)
 
 	if company and source_doc.company != company:
-		frappe.throw(f"Invoice {source_doc.name} does not belong to company {company}.")
+		frappe.throw(_("Invoice {0} does not belong to company {1}.").format(source_doc.name, company))
 
 	if source_doc.docstatus != 1:
-		frappe.throw("Only submitted invoices can be returned.")
+		frappe.throw(_("Only submitted invoices can be returned."))
 
 	if source_doc.is_return:
-		frappe.throw("Cannot return a return invoice.")
+		frappe.throw(_("Cannot return a return invoice."))
 
 	# Validate all items exist and quantities are within returnable limits
 	source_items_by_name = {item.name: item for item in source_doc.items}
@@ -203,11 +209,11 @@ def process_pos_refund(invoice_name, return_items, company=None):
 		item_name = ri.get("item_name")
 		qty = flt(ri.get("qty", 0))
 		if not item_name:
-			frappe.throw("Each return item must have an item_name.")
+			frappe.throw(_("Each return item must have an item_name."))
 		if qty <= 0:
-			frappe.throw(f"Return quantity must be greater than zero for item {item_name}.")
+			frappe.throw(_("Return quantity must be greater than zero for item {0}.").format(item_name))
 		if item_name not in source_items_by_name:
-			frappe.throw(f"Item {item_name} not found in invoice {invoice_name}.")
+			frappe.throw(_("Item {0} not found in invoice {1}.").format(item_name, invoice_name))
 		source_item = source_items_by_name[item_name]
 		item_qty = abs(source_item.qty) if source_item.qty else 0
 		returned = get_invoice_item_returned_qty("POS Invoice", invoice_name, source_doc.customer, item_name)
@@ -215,7 +221,9 @@ def process_pos_refund(invoice_name, return_items, company=None):
 		max_returnable = item_qty - returned_qty
 		if qty > max_returnable:
 			frappe.throw(
-				f"Return quantity {qty} for item {item_name} exceeds maximum returnable quantity {max_returnable}."
+				_("Return quantity {0} for item {1} exceeds maximum returnable quantity {2}.").format(
+					qty, item_name, max_returnable
+				)
 			)
 		validated_qty[item_name] = qty
 
@@ -230,7 +238,7 @@ def process_pos_refund(invoice_name, return_items, company=None):
 	# Create the return document via ERPNext's standard mechanism
 	target_doc = make_return_doc("POS Invoice", invoice_name, target_doc=None)
 	if not target_doc:
-		frappe.throw("Could not create return invoice.")
+		frappe.throw(_("Could not create return invoice."))
 
 	frappe.has_permission("POS Invoice", "create", doc=target_doc, throw=True)
 
@@ -246,7 +254,7 @@ def process_pos_refund(invoice_name, return_items, company=None):
 				items_to_keep.append(item)
 
 		if not items_to_keep:
-			frappe.throw("No matching items found in return document.")
+			frappe.throw(_("No matching items found in return document."))
 
 		target_doc.items = items_to_keep
 		target_doc.calculate_taxes_and_totals()
@@ -254,7 +262,7 @@ def process_pos_refund(invoice_name, return_items, company=None):
 		# Adjust payments proportionally for partial return
 		original_total = abs(source_doc.grand_total) or 0
 		if original_total == 0:
-			frappe.throw("Cannot partially refund an invoice with a zero grand total.")
+			frappe.throw(_("Cannot partially refund an invoice with a zero grand total."))
 		returned_total = abs(target_doc.grand_total)
 		proportion = returned_total / original_total
 
@@ -282,7 +290,7 @@ def process_pos_refund(invoice_name, return_items, company=None):
 
 
 @frappe.whitelist(allow_guest=False)
-def get_refunds_for_period(company, from_date, to_date, limit=200):
+def get_refunds_for_period(company: str, from_date: str, to_date: str, limit: int = 200):
 	"""Get submitted POS return invoices for a company within a date range.
 
 	args:
@@ -292,7 +300,7 @@ def get_refunds_for_period(company, from_date, to_date, limit=200):
 	        limit: Maximum number of refunds to fetch (default 200)
 	"""
 	if not company:
-		frappe.throw("Company is required")
+		frappe.throw(_("Company is required"))
 
 	frappe.has_permission("POS Invoice", "read", throw=True)
 
