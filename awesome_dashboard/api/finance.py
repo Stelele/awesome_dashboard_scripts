@@ -60,15 +60,21 @@ def get_journal_entries(company, start_date, end_date):
 			AND je.docstatus < 2
 	"""
 
-	return frappe.db.sql(query, {
-		"company": company,
-		"start_date": start_date,
-		"end_date": end_date,
-	}, as_dict=True)
+	return frappe.db.sql(
+		query,
+		{
+			"company": company,
+			"start_date": start_date,
+			"end_date": end_date,
+		},
+		as_dict=True,
+	)
 
 
 @frappe.whitelist(allow_guest=False)
-def amend_expense_journal_entry(journal_entry, amount, description, expense_account, income_account, posting_date, company):
+def amend_expense_journal_entry(
+	journal_entry, amount, description, expense_account, income_account, posting_date, company
+):
 	"""Cancel and recreate a journal entry with new values.
 
 	args:
@@ -112,19 +118,21 @@ def amend_expense_journal_entry(journal_entry, amount, description, expense_acco
 		je = frappe.get_doc("Journal Entry", journal_entry)
 		je.cancel()
 
-		new_je = frappe.get_doc({
-			"doctype": "Journal Entry",
-			"voucher_type": "Journal Entry",
-			"company": company,
-			"posting_date": posting_date,
-			"user_remark": description or "",
-			"amended_from": journal_entry,
-			"amendment_date": posting_date,
-			"accounts": [
-				{"account": expense_account, "debit_in_account_currency": amount},
-				{"account": income_account, "credit_in_account_currency": amount},
-			],
-		})
+		new_je = frappe.get_doc(
+			{
+				"doctype": "Journal Entry",
+				"voucher_type": "Journal Entry",
+				"company": company,
+				"posting_date": posting_date,
+				"user_remark": description or "",
+				"amended_from": journal_entry,
+				"amendment_date": posting_date,
+				"accounts": [
+					{"account": expense_account, "debit_in_account_currency": amount},
+					{"account": income_account, "credit_in_account_currency": amount},
+				],
+			}
+		)
 		new_je.insert()
 		new_je.submit()
 

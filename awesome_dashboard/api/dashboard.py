@@ -23,9 +23,7 @@ def _build_expense_account_conditions(company, params, conditions):
 	stock = _get_account_bounds(company, "Stock Expenses")
 
 	if not indirect and not direct:
-		frappe.throw(
-			f"Could not find 'Indirect Expenses' or 'Direct Expenses' roots for company {company}"
-		)
+		frappe.throw(f"Could not find 'Indirect Expenses' or 'Direct Expenses' roots for company {company}")
 
 	if indirect:
 		conditions.append("(acc.lft BETWEEN %s AND %s)")
@@ -33,9 +31,7 @@ def _build_expense_account_conditions(company, params, conditions):
 
 	if direct:
 		if stock:
-			conditions.append(
-				"(acc.lft BETWEEN %s AND %s AND NOT (acc.lft BETWEEN %s AND %s))"
-			)
+			conditions.append("(acc.lft BETWEEN %s AND %s AND NOT (acc.lft BETWEEN %s AND %s))")
 			params.extend([direct["lft"], direct["rgt"], stock["lft"], stock["rgt"]])
 		else:
 			conditions.append("(acc.lft BETWEEN %s AND %s)")
@@ -128,119 +124,164 @@ def dashboard_complete(from_date, to_date, prev_from_date, prev_to_date, company
 	"""
 	results = []
 
-	current_sales = frappe.db.sql("""
+	current_sales = frappe.db.sql(
+		"""
 		SELECT COALESCE(SUM(total), 0) as total, COALESCE(COUNT(*), 0) as count
 		FROM `tabPOS Invoice`
 		WHERE docstatus = 1 AND posting_date BETWEEN %s AND %s AND company = %s
-	""", (from_date, to_date, company), as_dict=True)[0]
+	""",
+		(from_date, to_date, company),
+		as_dict=True,
+	)[0]
 
-	prev_sales = frappe.db.sql("""
+	prev_sales = frappe.db.sql(
+		"""
 		SELECT COALESCE(SUM(total), 0) as total, COALESCE(COUNT(*), 0) as count
 		FROM `tabPOS Invoice`
 		WHERE docstatus = 1 AND posting_date BETWEEN %s AND %s AND company = %s
-	""", (prev_from_date, prev_to_date, company), as_dict=True)[0]
+	""",
+		(prev_from_date, prev_to_date, company),
+		as_dict=True,
+	)[0]
 
-	results.append({
-		"metric_type": "sales_summary",
-		"cur_total": current_sales.total,
-		"cur_count": current_sales.count,
-		"prev_total": prev_sales.total,
-		"prev_count": prev_sales.count,
-	})
+	results.append(
+		{
+			"metric_type": "sales_summary",
+			"cur_total": current_sales.total,
+			"cur_count": current_sales.count,
+			"prev_total": prev_sales.total,
+			"prev_count": prev_sales.count,
+		}
+	)
 
-	current_purchases = frappe.db.sql("""
+	current_purchases = frappe.db.sql(
+		"""
 		SELECT COALESCE(SUM(grand_total), 0) as total, COALESCE(COUNT(*), 0) as count
 		FROM `tabPurchase Invoice`
 		WHERE docstatus = 1 AND posting_date BETWEEN %s AND %s AND company = %s
-	""", (from_date, to_date, company), as_dict=True)[0]
+	""",
+		(from_date, to_date, company),
+		as_dict=True,
+	)[0]
 
-	prev_purchases = frappe.db.sql("""
+	prev_purchases = frappe.db.sql(
+		"""
 		SELECT COALESCE(SUM(grand_total), 0) as total, COALESCE(COUNT(*), 0) as count
 		FROM `tabPurchase Invoice`
 		WHERE docstatus = 1 AND posting_date BETWEEN %s AND %s AND company = %s
-	""", (prev_from_date, prev_to_date, company), as_dict=True)[0]
+	""",
+		(prev_from_date, prev_to_date, company),
+		as_dict=True,
+	)[0]
 
-	results.append({
-		"metric_type": "purchase_summary",
-		"cur_total": current_purchases.total,
-		"cur_count": current_purchases.count,
-		"prev_total": prev_purchases.total,
-		"prev_count": prev_purchases.count,
-	})
+	results.append(
+		{
+			"metric_type": "purchase_summary",
+			"cur_total": current_purchases.total,
+			"cur_count": current_purchases.count,
+			"prev_total": prev_purchases.total,
+			"prev_count": prev_purchases.count,
+		}
+	)
 
 	expense_params = [company, from_date, to_date]
 	expense_conditions = []
 	_build_expense_account_conditions(company, expense_params, expense_conditions)
 	expense_condition = " OR ".join(expense_conditions)
 
-	current_expenses = frappe.db.sql(f"""
+	current_expenses = frappe.db.sql(
+		f"""
 		SELECT COALESCE(SUM(gle.debit) - SUM(gle.credit), 0) as total, COALESCE(COUNT(*), 0) as count
 		FROM `tabGL Entry` gle
 		INNER JOIN `tabAccount` acc ON acc.name = gle.account
 		WHERE gle.company = %s AND gle.posting_date BETWEEN %s AND %s AND gle.is_cancelled = 0
 		AND ({expense_condition})
-	""", tuple(expense_params), as_dict=True)[0]
+	""",
+		tuple(expense_params),
+		as_dict=True,
+	)[0]
 
 	prev_expense_params = [company, prev_from_date, prev_to_date, *expense_params[3:]]
-	prev_expenses = frappe.db.sql(f"""
+	prev_expenses = frappe.db.sql(
+		f"""
 		SELECT COALESCE(SUM(gle.debit) - SUM(gle.credit), 0) as total, COALESCE(COUNT(*), 0) as count
 		FROM `tabGL Entry` gle
 		INNER JOIN `tabAccount` acc ON acc.name = gle.account
 		WHERE gle.company = %s AND gle.posting_date BETWEEN %s AND %s AND gle.is_cancelled = 0
 		AND ({expense_condition})
-	""", tuple(prev_expense_params), as_dict=True)[0]
+	""",
+		tuple(prev_expense_params),
+		as_dict=True,
+	)[0]
 
-	results.append({
-		"metric_type": "expense_summary",
-		"cur_total": current_expenses.total,
-		"cur_count": current_expenses.count,
-		"prev_total": prev_expenses.total,
-		"prev_count": prev_expenses.count,
-	})
+	results.append(
+		{
+			"metric_type": "expense_summary",
+			"cur_total": current_expenses.total,
+			"cur_count": current_expenses.count,
+			"prev_total": prev_expenses.total,
+			"prev_count": prev_expenses.count,
+		}
+	)
 
 	cur_gross_profit = current_sales.total - current_purchases.total
 	prev_gross_profit = prev_sales.total - prev_purchases.total
 	cur_net_profit = cur_gross_profit - current_expenses.total
 	prev_net_profit = prev_gross_profit - prev_expenses.total
 
-	results.append({
-		"metric_type": "gross_profit_summary",
-		"cur_total": cur_gross_profit,
-		"prev_total": prev_gross_profit,
-	})
-	results.append({
-		"metric_type": "gross_margin_summary",
-		"cur_total": (current_sales.total and (cur_gross_profit / current_sales.total * 100)) or 0,
-		"prev_total": (prev_sales.total and (prev_gross_profit / prev_sales.total * 100)) or 0,
-	})
-	results.append({
-		"metric_type": "net_profit_summary",
-		"cur_total": cur_net_profit,
-		"prev_total": prev_net_profit,
-	})
-	results.append({
-		"metric_type": "net_margin_summary",
-		"cur_total": (current_sales.total and (cur_net_profit / current_sales.total * 100)) or 0,
-		"prev_total": (prev_sales.total and (prev_net_profit / prev_sales.total * 100)) or 0,
-	})
+	results.append(
+		{
+			"metric_type": "gross_profit_summary",
+			"cur_total": cur_gross_profit,
+			"prev_total": prev_gross_profit,
+		}
+	)
+	results.append(
+		{
+			"metric_type": "gross_margin_summary",
+			"cur_total": (current_sales.total and (cur_gross_profit / current_sales.total * 100)) or 0,
+			"prev_total": (prev_sales.total and (prev_gross_profit / prev_sales.total * 100)) or 0,
+		}
+	)
+	results.append(
+		{
+			"metric_type": "net_profit_summary",
+			"cur_total": cur_net_profit,
+			"prev_total": prev_net_profit,
+		}
+	)
+	results.append(
+		{
+			"metric_type": "net_margin_summary",
+			"cur_total": (current_sales.total and (cur_net_profit / current_sales.total * 100)) or 0,
+			"prev_total": (prev_sales.total and (prev_net_profit / prev_sales.total * 100)) or 0,
+		}
+	)
 
-	month_sales = frappe.db.sql("""
+	month_sales = frappe.db.sql(
+		"""
 		SELECT DATE_FORMAT(posting_date, '%%Y-%%m') as grouping_name, SUM(total) as total, COUNT(*) as count
 		FROM `tabPOS Invoice`
 		WHERE docstatus = 1 AND posting_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH) AND company = %s
 		GROUP BY DATE_FORMAT(posting_date, '%%Y-%%m')
 		ORDER BY grouping_name
-	""", (company,), as_dict=True)
+	""",
+		(company,),
+		as_dict=True,
+	)
 
 	for row in month_sales:
-		results.append({
-			"metric_type": "sales_by_month",
-			"grouping_name": row.grouping_name,
-			"total": row.total,
-			"count": row.count,
-		})
+		results.append(
+			{
+				"metric_type": "sales_by_month",
+				"grouping_name": row.grouping_name,
+				"total": row.total,
+				"count": row.count,
+			}
+		)
 
-	category_sales = frappe.db.sql("""
+	category_sales = frappe.db.sql(
+		"""
 		SELECT i.item_group, SUM(pii.amount) as total
 		FROM `tabPOS Invoice` pi
 		INNER JOIN `tabPOS Invoice Item` pii ON pii.parent = pi.name
@@ -248,22 +289,26 @@ def dashboard_complete(from_date, to_date, prev_from_date, prev_to_date, company
 		WHERE pi.docstatus = 1 AND pi.posting_date BETWEEN %s AND %s AND pi.company = %s
 		GROUP BY i.item_group
 		ORDER BY total DESC
-	""", (from_date, to_date, company), as_dict=True)
+	""",
+		(from_date, to_date, company),
+		as_dict=True,
+	)
 
 	for row in category_sales:
-		results.append({
-			"metric_type": "sales_by_category",
-			"item_group": row.item_group,
-			"total": row.total,
-		})
-
-	if warehouse:
-		wh_name = frappe.db.get_value(
-			"Warehouse", {"warehouse_name": warehouse, "company": company}, "name"
+		results.append(
+			{
+				"metric_type": "sales_by_category",
+				"item_group": row.item_group,
+				"total": row.total,
+			}
 		)
 
+	if warehouse:
+		wh_name = frappe.db.get_value("Warehouse", {"warehouse_name": warehouse, "company": company}, "name")
+
 		if wh_name:
-			stock_groups = frappe.db.sql("""
+			stock_groups = frappe.db.sql(
+				"""
 				SELECT
 					item.item_group,
 					ROUND(SUM((bin.actual_qty - COALESCE(pos_reserved.reserved_qty, 0)) * COALESCE(bp.price_list_rate, 0)), 2) as total,
@@ -316,17 +361,23 @@ def dashboard_complete(from_date, to_date, prev_from_date, prev_to_date, company
 				WHERE bin.warehouse = %s AND bin.actual_qty > 0
 				GROUP BY item.item_group
 				ORDER BY total DESC
-			""", (wh_name, company, wh_name, company, wh_name), as_dict=True)
+			""",
+				(wh_name, company, wh_name, company, wh_name),
+				as_dict=True,
+			)
 
 			for row in stock_groups:
-				results.append({
-					"metric_type": "stock_by_group",
-					"item_group": row.item_group,
-					"total": row.total or 0,
-					"selling_value": row.selling_value or 0,
-				})
+				results.append(
+					{
+						"metric_type": "stock_by_group",
+						"item_group": row.item_group,
+						"total": row.total or 0,
+						"selling_value": row.selling_value or 0,
+					}
+				)
 
-			stock_summary = frappe.db.sql("""
+			stock_summary = frappe.db.sql(
+				"""
 				SELECT
 					ROUND(SUM((bin.actual_qty - COALESCE(pos_reserved.reserved_qty, 0)) * COALESCE(bp.price_list_rate, 0)), 2) as total_value,
 					ROUND(SUM((bin.actual_qty - COALESCE(pos_reserved.reserved_qty, 0)) * COALESCE(sp.price_list_rate, 0)), 2) as selling_value
@@ -375,13 +426,18 @@ def dashboard_complete(from_date, to_date, prev_from_date, prev_to_date, company
 					WHERE price_list = 'Standard Selling'
 				) sp ON bin.item_code = sp.item_code
 				WHERE bin.warehouse = %s AND bin.actual_qty > 0
-			""", (wh_name, company, wh_name, company, wh_name), as_dict=True)[0]
+			""",
+				(wh_name, company, wh_name, company, wh_name),
+				as_dict=True,
+			)[0]
 
-			results.append({
-				"metric_type": "stock_summary",
-				"total_value": stock_summary.total_value or 0,
-				"selling_value": stock_summary.selling_value or 0,
-			})
+			results.append(
+				{
+					"metric_type": "stock_summary",
+					"total_value": stock_summary.total_value or 0,
+					"selling_value": stock_summary.selling_value or 0,
+				}
+			)
 
 	return results
 
@@ -410,7 +466,8 @@ def dashboard_bar_chart(from_date, to_date, grouping, company):
 	if not sql_expr:
 		frappe.throw(f"Invalid grouping '{grouping}'. Allowed: {list(format_map.keys())}")
 
-	raw_rows = frappe.db.sql(f"""
+	raw_rows = frappe.db.sql(
+		f"""
 		SELECT
 			{sql_expr} as grouping_name,
 			SUM(total) as total,
@@ -421,7 +478,10 @@ def dashboard_bar_chart(from_date, to_date, grouping, company):
 			AND company = %s
 		GROUP BY {sql_expr}
 		ORDER BY grouping_name
-	""", (from_date, to_date, company), as_dict=True)
+	""",
+		(from_date, to_date, company),
+		as_dict=True,
+	)
 
 	labels = []
 	data = []
@@ -478,7 +538,8 @@ def dashboard_expense_breakdown(from_date, to_date, company):
 
 	account_tree_condition = " OR ".join(conditions)
 
-	query = """
+	query = (
+		"""
 		SELECT
 			acc.account_name AS expense_type,
 			SUM(gle.debit) - SUM(gle.credit) AS total,
@@ -488,10 +549,13 @@ def dashboard_expense_breakdown(from_date, to_date, company):
 		WHERE gle.company = %s
 		AND gle.posting_date BETWEEN %s AND %s
 		AND gle.is_cancelled = 0
-		AND (""" + account_tree_condition + """)
+		AND ("""
+		+ account_tree_condition
+		+ """)
 		GROUP BY gle.account
 		ORDER BY total DESC
 	"""
+	)
 
 	return frappe.db.sql(query, tuple(params), as_dict=True)
 
