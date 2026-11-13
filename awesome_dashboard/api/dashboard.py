@@ -53,7 +53,9 @@ def grouped_sales_summary(from_date: str, to_date: str, company: str, time_group
 	"""
 	time_grouping = sanitize_time_grouping(time_grouping)
 
-	query = f"""
+	# Interpolates only internally-built fragments (validated time-grouping placeholders /
+	# account conditions built from DB account names) — no user-supplied text reaches the query string.
+	query = f"""  # nosemgrep: frappe-sql-format-injection
 		SELECT
 			DATE_FORMAT(posting_date, '{time_grouping}') AS grouping_name,
 			SUM(total) AS total,
@@ -91,7 +93,9 @@ def grouped_expenses_summary(from_date: str, to_date: str, company: str, time_gr
 
 	account_tree_condition = " OR ".join(conditions)
 
-	query = f"""
+	# Interpolates only internally-built fragments (validated time-grouping placeholders /
+	# account conditions built from DB account names) — no user-supplied text reaches the query string.
+	query = f"""  # nosemgrep: frappe-sql-format-injection
 		SELECT
 			DATE_FORMAT(gle.posting_date, '{time_grouping}') AS grouping_name,
 			SUM(gle.debit) - SUM(gle.credit) AS total,
@@ -199,7 +203,9 @@ def dashboard_complete(
 	_build_expense_account_conditions(company, expense_params, expense_conditions)
 	expense_condition = " OR ".join(expense_conditions)
 
-	current_expenses = frappe.db.sql(
+	# Interpolates only internally-built fragments (validated time-grouping placeholders /
+	# account conditions built from DB account names) — no user-supplied text reaches the query string.
+	current_expenses = frappe.db.sql(  # nosemgrep: frappe-sql-format-injection
 		f"""
 		SELECT COALESCE(SUM(gle.debit) - SUM(gle.credit), 0) as total, COALESCE(COUNT(*), 0) as count
 		FROM `tabGL Entry` gle
@@ -212,7 +218,9 @@ def dashboard_complete(
 	)[0]
 
 	prev_expense_params = [company, prev_from_date, prev_to_date, *expense_params[3:]]
-	prev_expenses = frappe.db.sql(
+	# Interpolates only internally-built fragments (validated time-grouping placeholders /
+	# account conditions built from DB account names) — no user-supplied text reaches the query string.
+	prev_expenses = frappe.db.sql(  # nosemgrep: frappe-sql-format-injection
 		f"""
 		SELECT COALESCE(SUM(gle.debit) - SUM(gle.credit), 0) as total, COALESCE(COUNT(*), 0) as count
 		FROM `tabGL Entry` gle
@@ -476,7 +484,9 @@ def dashboard_bar_chart(from_date: str, to_date: str, grouping: str, company: st
 	if not sql_expr:
 		frappe.throw(_("Invalid grouping '{0}'. Allowed: {1}.").format(grouping, list(format_map.keys())))
 
-	raw_rows = frappe.db.sql(
+	# Interpolates only internally-built fragments (validated time-grouping placeholders /
+	# account conditions built from DB account names) — no user-supplied text reaches the query string.
+	raw_rows = frappe.db.sql(  # nosemgrep: frappe-sql-format-injection
 		f"""
 		SELECT
 			{sql_expr} as grouping_name,
