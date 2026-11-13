@@ -299,15 +299,22 @@ def process_pos_refund(invoice_name: str, return_items: str, company: str | None
 	try:
 		# Keep only selected rows at the selected (negative) quantities.
 		items_to_keep = []
+		matched_names = set()
 		for item in target_doc.items:
 			source_item_name = getattr(item, "pos_invoice_item", None) or item.name
 			if source_item_name in selected_qty:
 				item.qty = -abs(selected_qty[source_item_name])
 				item.amount = item.rate * item.qty if item.rate else 0
 				items_to_keep.append(item)
+				matched_names.add(source_item_name)
 
 		if not items_to_keep:
 			frappe.throw(_("No matching items found in return document."))
+
+		# Every requested row must exist on the invoice — never silently under-refund.
+		for requested_name in selected_qty:
+			if requested_name not in matched_names:
+				frappe.throw(_("Item {0} not found in invoice {1}.").format(requested_name, invoice_name))
 
 		target_doc.items = items_to_keep
 		target_doc.calculate_taxes_and_totals()
