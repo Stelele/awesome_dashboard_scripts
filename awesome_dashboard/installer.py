@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import frappe
+from frappe import _
+from frappe.utils import today
 
 DASHBOARD_ROLE = "Awesome Dashboard User"
 
@@ -39,7 +41,9 @@ DASHBOARD_PERMISSIONS = {
 		"cancel": 1,
 		"amend": 1,
 	},
+	"POS Closing Entry": {"read": 1, "create": 1, "submit": 1},
 	"POS Invoice": {"read": 1, "write": 1, "create": 1, "submit": 1},
+	"POS Opening Entry": {"read": 1, "write": 1, "create": 1, "submit": 1, "cancel": 1},
 	"POS Profile": {"read": 1},
 	"Serial and Batch Bundle": {"read": 1, "write": 1, "create": 1, "submit": 1},
 	"Purchase Invoice": {
@@ -85,6 +89,7 @@ def after_migrate():
 	because add_permission copies them into Custom DocPerm before adding the
 	new rule."""
 	ensure_dashboard_permissions()
+	seed_dashboard_pos_profiles()
 
 
 def ensure_dashboard_permissions():
@@ -117,3 +122,100 @@ def ensure_dashboard_permissions():
 
 	# Outside any request transaction (migrate hooks) — commit makes the grant durable immediately.
 	frappe.db.commit()  # nosemgrep
+
+
+def get_dashboard_user() -> str:
+	"""Return the first enabled user holding the Awesome Dashboard User role."""
+	users = frappe.get_all(
+		"Has Role",
+		filters={"role": DASHBOARD_ROLE, "parenttype": "User"},
+		pluck="parent",
+	)
+	for user in users:
+		if frappe.db.get_value("User", user, "enabled"):
+			return user
+	frappe.throw(_("No enabled user found with role {0}.").format(DASHBOARD_ROLE))
+
+
+def _abbr(company: str) -> str:
+	return frappe.get_cached_value("Company", company, "abbr")
+
+
+def _dashboard_logger():
+	return frappe.logger("dashboard_pos")
+
+
+def get_dashboard_pos_profile(company: str) -> str:
+	"""Return the dashboard POS profile for a company, creating it if missing.
+
+	Idempotent. Uses ignore_permissions so it can be called from migrate/scheduler.
+	Profile name: `Dashboard POS - {abbr}`. The profile's payment rows are not used
+	for refund money (`_set_return_payments` rebuilds from the source invoice); we
+	add Cash if available for a valid default payment configuration.
+	"""
+	if not company:
+		frappe.throw(_("Company is required"))
+
+	profile_name = f"Dashboard POS - {_abbr(company)}"
+	if frappe.db.exists("POS Profile", profile_name):
+		return profile_name
+
+	warehouse = frappe.db.get_value("Warehouse", {"company": company, "warehouse_name": "Stores"})
+	if not warehouse:
+		warehouse = frappe.db.get_value("Company", company, "default_warehouse")
+
+	write_off_account = None
+	write_off_cost_center = None
+	existing = frappe.get_all("POS Profile", filters={"company": company}, limit=1, pluck="name")
+	if existing:
+		write_off_account, write_off_cost_center = frappe.db.get_value(
+			"POS Profile", existing[0], ["write_off_account", "write_off_cost_center"]
+		)
+
+	if not write_off_cost_center:
+		write_off_cost_center = frappe.db.get_value("Company", company, "cost_center")
+		if not write_off_cost_center:
+			write_off_cost_center = frappe.db.get_value(
+				"Cost Center", {"company": company, "is_group": 0}, "name"
+			)
+	if not write_off_account:
+		write_off_account = frappe.db.get_value(
+			"Account", {"company": company, "account_name": "Write Off"}, "name"
+		)
+		if not write_off_account:
+			write_off_account = frappe.db.get_value(
+				"Account", {"company": company, "account_type": "Round Off"}, "name"
+			)
+
+	doc = frappe.get_doc(
+		{
+			"doctype": "POS Profile",
+			"name": profile_name,
+			"company": company,
+			"warehouse": warehouse,
+			"write_off_account": write_off_account,
+			"write_off_cost_center": write_off_cost_center,
+		}
+	)
+
+	if frappe.db.exists("Mode of Payment", "Cash"):
+		doc.append("payments", {"mode_of_payment": "Cash", "default": 1})
+
+	doc.insert(ignore_permissions=True)
+	frappe.db.commit()  # nosemgrep
+	_dashboard_logger().info("Created dashboard POS profile %s for company %s", profile_name, company)
+	return profile_name
+
+
+def seed_dashboard_pos_profiles():
+	"""Seed dashboard POS profiles for all companies. Best-effort per company."""
+	logger = _dashboard_logger()
+	for company in frappe.get_all("Company", pluck="name"):
+		try:
+			get_dashboard_pos_profile(company)
+		except Exception:
+			logger.error(
+				"Failed to seed dashboard POS profile for company %s: %s",
+				company,
+				frappe.get_traceback(),
+			)
