@@ -177,6 +177,13 @@ after_migrate = ["awesome_dashboard.installer.after_migrate"]
 # 	],
 # }
 
+# Scheduled Tasks
+# ---------------
+
+scheduler_events = {
+	"daily": ["awesome_dashboard.api.refunds.close_stale_dashboard_sessions"],
+}
+
 # Testing
 # -------
 
