@@ -17,6 +17,7 @@ DASHBOARD_PERMISSIONS = {
 	"Account": {"read": 1},
 	"Buying Settings": {"read": 1},
 	"Company": {"read": 1},
+	"Customer": {"read": 1},
 	"Item": {"read": 1, "write": 1, "create": 1},
 	"Item Group": {"read": 1},
 	"Item Price": {"read": 1, "write": 1, "create": 1},
@@ -39,6 +40,7 @@ DASHBOARD_PERMISSIONS = {
 		"amend": 1,
 	},
 	"POS Invoice": {"read": 1, "write": 1, "create": 1, "submit": 1},
+	"Serial and Batch Bundle": {"read": 1, "write": 1, "create": 1, "submit": 1},
 	"Purchase Invoice": {
 		"read": 1,
 		"write": 1,
