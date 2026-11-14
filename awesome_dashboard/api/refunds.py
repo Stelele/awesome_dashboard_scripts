@@ -448,7 +448,9 @@ def process_pos_refund(invoice_name: str, return_items: str, company: str | None
 		# Never leave a stray draft behind: drop the return if it was saved as a draft.
 		try:
 			if target_doc and target_doc.docstatus == 0 and frappe.db.exists("POS Invoice", target_doc.name):
-				frappe.delete_doc("POS Invoice", target_doc.name, ignore_permissions=False)
+				# The draft was created by this same flow, so the app owns its cleanup;
+				# the dashboard role deliberately has no delete on POS Invoice.
+				frappe.delete_doc("POS Invoice", target_doc.name, ignore_permissions=True)
 		except Exception as cleanup_err:
 			frappe.log_error(
 				title="POS refund cleanup failed",
