@@ -342,6 +342,10 @@ def process_pos_refund(invoice_name: str, return_items: str, company: str | None
 def get_refunds_for_period(company: str, from_date: str, to_date: str, limit: int = 200):
 	"""Get submitted POS return invoices for a company within a date range.
 
+	Each refund dict carries an ``items`` list of what was returned:
+	``[{"item_name": <POS Invoice Item name>, "qty": <abs qty>}]``
+	(empty list if the return has no item rows).
+
 	args:
 	        company: Company name
 	        from_date: Start posting date (YYYY-MM-DD)
@@ -353,7 +357,7 @@ def get_refunds_for_period(company: str, from_date: str, to_date: str, limit: in
 
 	frappe.has_permission("POS Invoice", "read", throw=True)
 
-	return frappe.get_all(
+	refunds = frappe.get_all(
 		"POS Invoice",
 		filters={
 			"docstatus": 1,
@@ -375,3 +379,21 @@ def get_refunds_for_period(company: str, from_date: str, to_date: str, limit: in
 		order_by="posting_date desc, posting_time desc",
 		limit=cint(limit) or 200,
 	)
+
+	# One aggregate item fetch for all refunds (no N+1); return rows carry negative qty.
+	items_by_parent: dict[str, list] = {}
+	names = [r.name for r in refunds]
+	if names:
+		for row in frappe.get_all(
+			"POS Invoice Item",
+			filters={"parent": ["in", names]},
+			fields=["parent", "item_name", "qty"],
+		):
+			items_by_parent.setdefault(row.parent, []).append(
+				{"item_name": row.item_name, "qty": abs(row.qty)}
+			)
+
+	for r in refunds:
+		r["items"] = items_by_parent.get(r.name, [])
+
+	return refunds
