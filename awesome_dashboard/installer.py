@@ -40,6 +40,7 @@ DASHBOARD_PERMISSIONS = {
 		"amend": 1,
 	},
 	"POS Invoice": {"read": 1, "write": 1, "create": 1, "submit": 1},
+	"POS Profile": {"read": 1},
 	"Serial and Batch Bundle": {"read": 1, "write": 1, "create": 1, "submit": 1},
 	"Purchase Invoice": {
 		"read": 1,
