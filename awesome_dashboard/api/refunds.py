@@ -7,7 +7,9 @@ from erpnext.controllers.sales_and_purchase_return import (
 	is_invoice_returnable,
 )
 from frappe import _
-from frappe.utils import cint, flt
+from frappe.utils import cint, flt, today
+
+from awesome_dashboard.installer import get_dashboard_pos_profile, get_dashboard_user
 
 
 @frappe.whitelist(allow_guest=False)
@@ -159,6 +161,111 @@ def get_invoice_detail_for_refund(invoice_name: str, company: str | None = None)
 	}
 
 
+def _dashboard_logger():
+	return frappe.logger("dashboard_pos")
+
+
+def _close_dashboard_opening_entry(ope_name: str, today_date: str | None = None):
+	"""Close an open POS Opening Entry by creating and submitting a POS Closing Entry."""
+	ope = frappe.get_doc("POS Opening Entry", ope_name)
+	if ope.status != "Open":
+		return
+	close_date = today_date or today()
+	closing = frappe.get_doc(
+		{
+			"doctype": "POS Closing Entry",
+			"pos_opening_entry": ope.name,
+			"company": ope.company,
+			"pos_profile": ope.pos_profile,
+			"user": ope.user,
+			"period_start_date": close_date,
+			"posting_date": close_date,
+		}
+	)
+	closing.insert(ignore_permissions=True)
+	closing.submit()
+	_dashboard_logger().info(
+		"Closed dashboard POS opening entry %s for profile %s", ope.name, ope.pos_profile
+	)
+
+
+def _ensure_dashboard_session(company: str) -> str:
+	"""Ensure today's open dashboard POS session for the company and return its OPE name.
+
+	Design: docs/superpowers/specs/2026-11-15-dashboard-pos-sessions-design.md.
+	One user cannot hold two open POS sessions globally (check_user_already_assigned),
+	so stale/other-company dashboard sessions are closed first. Let exceptions propagate
+	so refund callers see the real failure.
+	"""
+	profile = get_dashboard_pos_profile(company)
+	today_date = today()
+
+	open_dashboard = frappe.get_all(
+		"POS Opening Entry",
+		filters={"pos_profile": ["like", "Dashboard POS - %"], "status": "Open", "docstatus": 1},
+		fields=["name", "pos_profile", "period_start_date", "company"],
+	)
+
+	for entry in open_dashboard:
+		period = str(entry.period_start_date) if entry.period_start_date else ""
+		if entry.pos_profile == profile and period == today_date:
+			return entry.name
+
+	# Close stale same-company or any other open dashboard session (one user, one open session).
+	for entry in open_dashboard:
+		_close_dashboard_opening_entry(entry.name, today_date=today_date)
+
+	dashboard_user = get_dashboard_user()
+	profile_doc = frappe.get_doc("POS Profile", profile)
+	mode_of_payment = "Cash"
+	if profile_doc.get("payments"):
+		mode_of_payment = profile_doc.payments[0].mode_of_payment or "Cash"
+
+	ope = frappe.get_doc(
+		{
+			"doctype": "POS Opening Entry",
+			"pos_profile": profile,
+			"company": company,
+			"user": dashboard_user,
+			"period_start_date": today_date,
+			"posting_date": today_date,
+			"balance_details": [{"mode_of_payment": mode_of_payment, "opening_amount": 0}],
+		}
+	)
+	ope.insert(ignore_permissions=True)
+	ope.submit()
+	frappe.db.commit()  # nosemgrep
+	_dashboard_logger().info("Opened dashboard POS session %s for profile %s", ope.name, profile)
+	return ope.name
+
+
+def close_stale_dashboard_sessions():
+	"""Daily scheduler: close stale dashboard POS sessions (period != today)."""
+	today_date = today()
+	closed = 0
+	open_dashboard = frappe.get_all(
+		"POS Opening Entry",
+		filters={"pos_profile": ["like", "Dashboard POS - %"], "status": "Open", "docstatus": 1},
+		fields=["name", "period_start_date"],
+	)
+	for entry in open_dashboard:
+		period = str(entry.period_start_date) if entry.period_start_date else ""
+		if period == today_date:
+			continue
+		try:
+			_close_dashboard_opening_entry(entry.name, today_date=today_date)
+			closed += 1
+		except Exception:
+			_dashboard_logger().error(
+				"Failed to close stale dashboard POS opening entry %s: %s",
+				entry.name,
+				frappe.get_traceback(),
+			)
+	if closed:
+		frappe.db.commit()  # nosemgrep
+	_dashboard_logger().info("Closed %s stale dashboard POS session(s)", closed)
+
+
 def _set_return_payments(target_doc, source_doc):
 	"""Rebuild a return doc's payments from the returned rows' own totals, capped at tendered.
 
@@ -239,6 +346,13 @@ def process_pos_refund(invoice_name: str, return_items: str, company: str | None
 	``_set_return_payments``) — never scaled off the source invoice's paid
 	amount (which may include change given or partial credit).
 
+	The return is routed onto the company's dashboard-managed POS profile and
+	ensures today's dashboard POS session is open, so refunds work on any day
+	regardless of shop till state. Design/spec:
+	docs/superpowers/specs/2026-11-15-dashboard-pos-sessions-design.md.
+	ERPNext validates the open session against the return doc's own pos_profile
+	(`validate_pos_opening_entry`), so the profile switch happens before save.
+
 	Over-quantity or otherwise invalid selections are rejected by ERPNext's own
 	controller validation when the return is submitted — no duplicated
 	returnable-qty checks here by design.
@@ -289,6 +403,12 @@ def process_pos_refund(invoice_name: str, return_items: str, company: str | None
 	if source_doc.is_return:
 		frappe.throw(_("Cannot return a return invoice."))
 
+	# Ensure today's dashboard-managed POS session and route the return onto it.
+	# validate_pos_opening_entry checks the return doc's own pos_profile, so switch
+	# pos_profile before save (see spec above).
+	_ensure_dashboard_session(source_doc.company)
+	dashboard_profile = get_dashboard_pos_profile(source_doc.company)
+
 	# Draft the return via ERPNext's own POS entry point (the same call the POS page makes).
 	target_doc = make_sales_return(invoice_name)
 	if not target_doc:
@@ -318,6 +438,7 @@ def process_pos_refund(invoice_name: str, return_items: str, company: str | None
 
 		target_doc.items = items_to_keep
 		target_doc.calculate_taxes_and_totals()
+		target_doc.pos_profile = dashboard_profile
 
 		_set_return_payments(target_doc, source_doc)
 
