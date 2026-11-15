@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import frappe
 from frappe import _
-from frappe.utils import today
 
 DASHBOARD_ROLE = "Awesome Dashboard User"
 
@@ -174,18 +173,36 @@ def get_dashboard_pos_profile(company: str) -> str:
 
 	if not write_off_cost_center:
 		write_off_cost_center = frappe.db.get_value("Company", company, "cost_center")
-		if not write_off_cost_center:
-			write_off_cost_center = frappe.db.get_value(
-				"Cost Center", {"company": company, "is_group": 0}, "name"
+	if not write_off_cost_center:
+		# Loud failure beats a guessed cost center: a wrong one mis-states
+		# write-off accounting downstream.
+		frappe.throw(
+			_("Company {0} has no write-off cost center; set one before enabling dashboard refunds.").format(
+				frappe.bold(company)
 			)
+		)
 	if not write_off_account:
 		write_off_account = frappe.db.get_value(
 			"Account", {"company": company, "account_name": "Write Off"}, "name"
 		)
-		if not write_off_account:
-			write_off_account = frappe.db.get_value(
-				"Account", {"company": company, "account_type": "Round Off"}, "name"
+	if not write_off_account:
+		frappe.throw(
+			_("Company {0} has no Write Off account; set one before enabling dashboard refunds.").format(
+				frappe.bold(company)
 			)
+		)
+	if not warehouse:
+		frappe.throw(
+			_(
+				"Company {0} has no Stores warehouse or default warehouse; set one before enabling dashboard refunds."
+			).format(frappe.bold(company))
+		)
+	if not frappe.db.exists("Mode of Payment", "Cash"):
+		frappe.throw(
+			_(
+				"Mode of Payment 'Cash' does not exist; it is required to seed the dashboard POS profile."
+			).format()
+		)
 
 	doc = frappe.get_doc(
 		{
@@ -201,8 +218,14 @@ def get_dashboard_pos_profile(company: str) -> str:
 	if frappe.db.exists("Mode of Payment", "Cash"):
 		doc.append("payments", {"mode_of_payment": "Cash", "default": 1})
 
-	doc.insert(ignore_permissions=True)
-	frappe.db.commit()  # nosemgrep
+	# Duplicate-insert race (two concurrent refunds seeding the same profile):
+	# catch and re-fetch so the caller always gets a working profile name.
+	try:
+		doc.insert(ignore_permissions=True)
+	except Exception as e:
+		if frappe.db.exists("POS Profile", profile_name):
+			return profile_name
+		raise e
 	_dashboard_logger().info("Created dashboard POS profile %s for company %s", profile_name, company)
 	return profile_name
 
