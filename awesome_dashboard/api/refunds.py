@@ -179,9 +179,13 @@ def _close_dashboard_opening_entry(ope_name: str, today_date: str | None = None)
 			"pos_profile": ope.pos_profile,
 			"user": ope.user,
 			"period_start_date": close_date,
+			"period_end_date": close_date,
 			"posting_date": close_date,
 		}
 	)
+	# App-owned infrastructure: the closing entry is created and submitted by the
+	# session lifecycle itself (scheduler runs as Administrator, refund path has
+	# the role grants) — ignore_permissions keeps both paths uniform.
 	closing.insert(ignore_permissions=True)
 	closing.submit()
 	_dashboard_logger().info(
@@ -217,9 +221,13 @@ def _ensure_dashboard_session(company: str) -> str:
 
 	dashboard_user = get_dashboard_user()
 	profile_doc = frappe.get_doc("POS Profile", profile)
-	mode_of_payment = "Cash"
-	if profile_doc.get("payments"):
-		mode_of_payment = profile_doc.payments[0].mode_of_payment or "Cash"
+	if not profile_doc.get("payments"):
+		frappe.throw(
+			_("Dashboard POS profile {0} has no payment rows; add one before refunds.").format(
+				frappe.bold(profile)
+			)
+		)
+	mode_of_payment = profile_doc.payments[0].mode_of_payment or "Cash"
 
 	ope = frappe.get_doc(
 		{
@@ -232,9 +240,20 @@ def _ensure_dashboard_session(company: str) -> str:
 			"balance_details": [{"mode_of_payment": mode_of_payment, "opening_amount": 0}],
 		}
 	)
-	ope.insert(ignore_permissions=True)
-	ope.submit()
-	frappe.db.commit()  # nosemgrep
+	# Concurrent refunds can both see "no open session" here; the loser hits
+	# ERPNext's one-open-session rule — re-check and reuse the winner's session.
+	try:
+		ope.insert(ignore_permissions=True)
+		ope.submit()
+	except frappe.ValidationError:
+		existing = frappe.get_value(
+			"POS Opening Entry",
+			{"pos_profile": profile, "status": "Open", "period_start_date": today_date},
+			"name",
+		)
+		if existing:
+			return existing
+		raise
 	_dashboard_logger().info("Opened dashboard POS session %s for profile %s", ope.name, profile)
 	return ope.name
 
